@@ -18,16 +18,19 @@ def fill(planar_curve):
     return Brep.CreatePlanarBreps(planar_curve) or\
     Mesh.CreateFromClosedPolyline(planar_curve)
 
-
+def initilize():
+	#define class here for better tweaking
+	pass
 
 def setup():
-		#initilize var here when click reset button (with global key word)
-		pass
+	#initilize var here when click reset button (with global key word)
+	pass
 def draw():
-		#constantly do some thing when the timer is on
-		pass
+	#constantly do some thing when the timer is on
+	pass
 
 if reset:
-		setup()
+	initilize()
+	setup()
 else:
     draw()
