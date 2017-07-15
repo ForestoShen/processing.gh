@@ -12,10 +12,12 @@ color = Color.FromArgb
 import math
 PI = math.pi
 import ghpythonlib.components as gc
+from interact import keyPressed
 
 def fill(planar_curve):
     return Brep.CreatePlanarBreps(planar_curve) or\
     Mesh.CreateFromClosedPolyline(planar_curve)
+
 
 
 def setup():
