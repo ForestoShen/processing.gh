@@ -15,15 +15,20 @@ PI = math.pi
 import Grasshopper.Kernel as gh
 import ghpythonlib.components as gc
 from interact import *
+import scriptcontext as sc
+
 
 ## global setting
+if "display" not in sc.sticky:
+    sc.sticky["display"] = rc.Display.CustomDisplay(True)
+display = sc.sticky["display"]
 
 
 ## display setting
 LINE_WEIGHT = 1
 DISPLAY_COLOR = Color.FromArgb(0,0,0)
 BACKGROUND_COLOR = Color.FromArgb(255,255,255)
-
+geometry_pipeline = []
 ## drawing setting
 DARW_MODE = ["SCREEN","CPLANE","WORLD"]
 DRAW_Count = 0
@@ -36,14 +41,25 @@ def setting(draw_func):## trace some hidden variable?
     DRAW_Count += 1
     if mode = CPLANE : _cplane.Z += 1
 	time.clock()
-    mouse = rs.GetCursorPos()[0] 
+    mouse = rs.GetCursorPos()[0]
+    display.Clear()
+    display.Dispose
     return draw_func
 
 def fill(planar_curve):
     return Mesh.CreateFromClosedPolyline(planar_curve) or\
            Brep.CreatePlanarBreps(planar_curve)
+def stroke(crv,color = DISPLAY_COLOR,wight = LINE_WEIGHT):
+    display.AddCurve(crv,sw,weight)
 
+def 
+    
 ### help func
+def translate():
+    ##move cplane
+    pass
+def strokeWeight(weight):
+    LINE_WEIGHT = weight
 def pushMatrix():
     _cplaneStack.append(_cplane)
 def popMatrix():
