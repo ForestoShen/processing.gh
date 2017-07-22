@@ -26,8 +26,7 @@ def keyPressed(key):
         a = ord(key.upper())
     except :
         a = _keydict[key.upper()]
-    keyState = user32.GetKeyState(a)
-    flag = False
-    if ((keyState & 0x8000) != 0):
-        flag = True
-    return flag
+    return user32.GetKeyState(a) & 0x8000
+
+def mousePressed():
+    return user32.GetKeyState(Keys.LButton) & 0x8000
