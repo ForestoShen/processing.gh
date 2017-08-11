@@ -52,12 +52,35 @@ _CPLANESTACK = []
 
 # buildin func
 
+def update_mouse():
+    global mouseX,screenX,mouseY,screenY,pmouseX,pmouseY
+    pmouseX = mouseX
+    pmouseY = mouseY
+    _posInfo = rs.GetCursorPos()
+    mouseX = _posInfo[0].X
+    screenX = _posInfo[1].X
+    mouseY = _posInfo[0].Y
+    screenY = _posInfo[1].Y
+def get_class(ghenv):
+    param = ghenv.Component.Params.Input[1]
+    for data in param.VolatileData.AllData(True):
+        cls =  data.Value
+        globals().update({cls.__name__ : cls})
+"""def get_class():
+    for cls in CLASS:
+        globals().update({cls.__name__:cls})"""
+
 def _clear():
     for uniquevar in [var for var in globals().copy() if var[0] != "_"]:
         del globals()[uniquevar]
-
-def _newView(name,screenX = 0,screenY = 0):
-    ls = Rhino.RhinoDoc.ActiveDoc.Views.GetViewList(True,False)
+def _time_test(fn,arg,time = 1000):
+    before = time.clock()
+    for i in range(time):
+        fn(*arg)
+    after = time.clock(
+    return after - before
+        
+def newView(name,screenX = 0,screenY = 0):
     exist = Rhino.RhinoDoc.ActiveDoc.Views.Find(name,True)
     if not exist:
         exist = Rhino.RhinoDoc.ActiveDoc.Views.Add(
@@ -66,10 +89,18 @@ def _newView(name,screenX = 0,screenY = 0):
         System.Drawing.Rectangle(screenX,screenY,screenX+width,screenY+height),
         True)
     return exist
-def _convert_polyline(curve):
-    return curve.ToPolyline(-1,-1,0.1,0,0, 0.1,0.1,0,True)
 
-def background(color):
+def convert_curve():
+    pass
+def convert_polyline(curve,maxAngleRadians = 0.1, tolerance = 0.1):
+    return curve.ToPolyline(0,0,maxAngleRadians,0,0, tolerance,0.01,0,True)
+
+def background(*args):
+    global OUTPUT
+    """ ,clear output, if has args, set color(a,r,g,b) """
+    if len(args):
+        c = Color.FromArgb(*args)
+        Rhino.ApplicationSettings.AppearanceSettings.ViewportBackgroundColor = c
     display.Clear()
     display.Dispose
     OUTPUT = []
@@ -79,7 +110,6 @@ def size(w,h):
     height = h
 def noFill():
     FILL_COLOR = Color.FromArgb(0,0,0,0)
-    
 def fill(a,r,g,b):
     FILL_COLOR = color(a,r,g,b)
 def fill_mesh(planar_curve):
@@ -97,16 +127,20 @@ def noStroke():
     STROKE_COLOR = Color.FromArgb(0,0,0,0)
 def dist(pt1,pt2):
     return pt1.DistanceTo(pt2)
+
 # helper function for consistent api
 def line(x1,y1,x2,y2):
+    global OUTPUT
     ln = Line(Point3d(x1,y1,0),Point3d(x2,y2,0))
     OUTPUT.append(ln)
     return ln
 def rect(x1,y1,x2,y2):
+    global OUTPUT
     rec = Rectangle3d(_CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
     OUTPUT.append(rec)
     return rec
 def ellipse(x,y,a,b):
+    global OUTPUT
     pl = Plane(_CPLANE)
     pl.Translate(Vector3d(x,y,0))
     ell = Ellipse(pl,a,b)
