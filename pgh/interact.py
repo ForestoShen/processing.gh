@@ -28,5 +28,5 @@ def keyPressed(key):
         a = _keydict[key.upper()]
     return user32.GetKeyState(a) & 0x8000
 
-def mousePressed():
+def isMousePressed():
     return user32.GetKeyState(Keys.LButton) & 0x8000
