@@ -1,8 +1,7 @@
 import scriptcontext as sc
 import Rhino
-import Rhino.Geometry as rg
 import rhinoscriptsyntax as rs
-from Rhino.Geometry import *
+from Rhino.Geometry import * #?
 import Grasshopper.Kernel.Data.GH_Path as Path
 import Grasshopper.DataTree as DataTree
 import Grasshopper.Kernel as gh #!
@@ -19,27 +18,27 @@ from random import seed as randomSeed
 from random import gauss as randomGaussian
 from random import shuffle, choice
 from random import uniform
-def random(*args):
-    if len(args) == 1:
-        return uniform(0,args[0])
-    elif len(args) == 2:
-        return uniform(*args)
-    else:
-        return uniform(0,1)
+from interact import *
 Simplex = perlin.SimplexNoise()
+def random(a = 1,b = 0):
+    "random(a,b)->[a,b], random(a)->[0,a], random()->[0,1]"
+    return uniform(a,b)
 def noise(*args):
+    "Simplex noise 1,2,3d"
     if len(args) == 1:
         return Simplex.noise2(args[0],0)
     elif len(args) == 2:
         return Simplex.noise2(*args)
     else:
         return Simplex.noise3(*args)
+def noiseDetial():
+    raise NotImplemented
 
-from interact import *
 # accessible global var
 width = 640
 height = 800
-
+P2D = Rhino.Display.DefinedViewportProjection.Top
+P3D = Rhino.Display.DefinedViewportProjection.Perspective
 ## global setting
 if "DISPLAY" not in sc.sticky:
     sc.sticky["DISPLAY"] = Rhino.Display.CustomDisplay(True)
@@ -59,6 +58,7 @@ STYLESTACK = []
 
 _CPLANESTACK = [Plane.WorldXY]
 CPLANE = _CPLANESTACK[0]
+
 AUTO_DISPLAY = True
 GEOMETRY_OUTPUT = True
 COLOR_OUTPUT = False
@@ -68,10 +68,10 @@ ColorOut = DataTree[Color]()
 TORLERENCE = Rhino.RhinoDoc.ActiveDoc.PageAbsoluteTolerance
 VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
 thisDoc = Rhino.RhinoDoc.ActiveDoc
-_MODE = "CPLANE"
 LOOP_COUNT = 0
 isLoop = True
 # mouse variable
+
 _posInfo = rs.GetCursorPos()
 mouseX = _posInfo[0].X
 mouseY = _posInfo[0].Y
@@ -88,6 +88,7 @@ def update_mouse():
     pmouseX = mouseX
     pmouseY = mouseY
     _pmousePressed = mousePressed
+    print 'befroe',mousePressed
     _posInfo = rs.GetCursorPos()
     mouseX = _posInfo[0].X
     screenX = _posInfo[1].X
@@ -97,12 +98,15 @@ def update_mouse():
     tup = Intersect.Intersection.LinePlane(client,CPLANE)
     if tup[0]:
         ptOnPlane = client.PointAt(tup[1])
-    mouseX = ptOnPlane.X
-    mouseY = ptOnPlane.Y
+        mouseX = ptOnPlane.X
+        mouseY = ptOnPlane.Y
     mousePressed = isMousePressed()
     mouseMoved = pmouseX != mouseX or pmouseY != mouseY
     mouseDragged = mouseMoved and mousePressed
     mouseClicked = _pmousePressed and not mousePressed
+    print _pmousePressed,mousePressed
+    print mouseClicked
+print 'outer',mousePressed
 # buildin func
 def show_grid(switch = False):
     " turn off cplane grid "
@@ -113,11 +117,10 @@ def get_class(ghenv):
     for data in param.VolatileData.AllData(True):
         cls =  data.Value
         ghenv.Script.SetVariable(cls.__name__, cls)
+
 def _clear():
     for uniquevar in [var for var in globals().copy() if var[0] != "_"]:
         del globals()[uniquevar]
-def glob():
-    print(globals())
 def _time_test(fn,arg,time = 1000):
     before = time.clock()
     for i in range(time):
@@ -127,12 +130,12 @@ def _time_test(fn,arg,time = 1000):
     print("cost %i ms for %i times"%(ms,count))
     return ms
 
-def NewView(name,screenX = 0,screenY = 0,seperate = True):
+def NewView(name,Projection,screenX = 0,screenY = 0,seperate = True):
     exist = Rhino.RhinoDoc.ActiveDoc.Views.Find(name,True)
     if not exist:
         exist = Rhino.RhinoDoc.ActiveDoc.Views.Add(
         name,
-        Rhino.Display.DefinedViewportProjection.Top,
+        Projection,
         System.Drawing.Rectangle(screenX,screenY,screenX+width,screenY+height),
         seperate)
         viewRect = Rectangle3d(CPLANE,width,height)
@@ -178,12 +181,12 @@ def background(*args):
         c = color(*args)
         Rhino.ApplicationSettings.AppearanceSettings.ViewportBackgroundColor = c
     _clearOutput()
-def size(w,h,name = 'processing'):
+def size(w,h,mode=P2D,name='processing'):
     " set size of new viewport "
     global width,height,VIEWPORT
     width = w
     height = h
-    VIEWPORT = NewView(name).ActiveViewport
+    VIEWPORT = NewView(name,mode).ActiveViewport
 
 #### add display
 def _clearOutput():
@@ -254,6 +257,12 @@ def popStyle():
         style = STYLESTACK.pop()
 
 ### create shape api ###
+class Shape(Curve):
+    def __init__():
+        self.shape = super(self,Shape).__init__()
+        self.plist = []
+def createShape():
+    return Shape()
 def beginShape(kind = None):
     #! add fiiled polygon
     num = len(_SHAPESTACK)
@@ -262,8 +271,10 @@ def beginShape(kind = None):
 def vertex(x,y,z):
     _CSHAPE.append(Point3d(x,y,z))
 def endShape():
-    plist = Polyline(_SHAPESTACK.pop())
-    _fill_color(plist)
+    pline = Polyline(_SHAPESTACK.pop())
+    if AUTO_DISPLAY:
+        Display(pline)
+    return pline
 
 ### matrix manipulation ###
 def translate(*args):
@@ -282,15 +293,14 @@ def rotate(rad,axis=None,center=None):
     return cplane.Rotate(rad,axis,center)
 
 def pushMatrix():
-    "_CPLANESTACK.append(CPLANE)"
-    return VIEWPORT.PushConstructionPlane(VIEWPORT.GetConstructionPlane())
+    _CPLANESTACK.append(CPLANE)
 def popMatrix():
-    """global CPLANE
-    CPLANE = _CPLANESTACK.pop() if len(_CPLANESTACK)>1"""
-    return VIEWPORT.PopConstructionPlane()
+    global CPLANE
+    CPLANE = _CPLANESTACK.pop() if len(_CPLANESTACK)>1 else _CPLANESTACK[0]
 def setMatrix(plane):
     "change CPLANE to plane"
-    return VIEWPORT.SetConstructionPlane(plane)
+    global CPLANE
+    CPLANE = plane
 ### time related ###
 def frameRate(fps):
     ms = 1000/fps
@@ -344,6 +354,12 @@ class PVector():
         v = PVector.random2D() * (1-z*z)**0.5
         return Vector3d(v.X,v.Y,z)
 # basic geometry drawing
+def loadImage(fpath):
+    "load image"
+    pass
+def image(img,x,y):
+    "position image"
+    pass
 def arc(x,y,w,h,start,stop,mode='PIE'):
     " construct a elliptic arc "
     if w == h:
@@ -389,7 +405,7 @@ def ellipse(x,y,a,b):
         Display(ell)
     return ell
 def text(content,x,y,z=0,height=None):
-    " !TODO add text to screen "
+    " add text to screen "
     te = TextEntity()
     te.Text = content
     te.Plane = CPLANE
@@ -427,7 +443,7 @@ def _insureRightOutput(ghenv):
     global GeoOut,ColorOut
     GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
     ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
-def setting(this,name = 'processing',autodisplay = True):
+def initialize(this,name = 'processing',autodisplay = True):
     global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,_CPLANESTACK,VIEWPORT
     _time = time.clock()
     isLoop = True
@@ -437,7 +453,6 @@ def setting(this,name = 'processing',autodisplay = True):
     AUTO_DISPLAY = autodisplay
     _insureRightOutput(this)
     _clearOutput()
-    show_grid()
     get_class(this)
 
 def noLoop():
@@ -453,7 +468,7 @@ def GO(ghenv):
             _setup = ghenv.LocalScope.setup
         except MissingMemberException:
             pass
-        setting(this = ghenv)
+        initialize(this = ghenv)
         _setup()
     elif isLoop:
         try:
