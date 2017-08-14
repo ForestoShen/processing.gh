@@ -59,8 +59,7 @@ CPLANE = Plane.WorldXY
 AUTO_DISPLAY = True
 GEOMETRY_OUTPUT = True
 COLOR_OUTPUT = False
-GeoOut = DataTree[object]()
-ColorOut = DataTree[Color]()
+
 ## general setting
 TORLERENCE = Rhino.RhinoDoc.ActiveDoc.PageAbsoluteTolerance
 VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
@@ -81,6 +80,7 @@ mouseClicked = False
 def update_mouse():
     global mouseX,screenX,mouseY,screenY,pmouseX,pmouseY,\
            _pmousePressed,mousePressed,mouseMoved,mouseDragged,mouseClicked
+
     pmouseX = mouseX
     pmouseY = mouseY
     _pmousePressed = mousePressed
@@ -90,11 +90,11 @@ def update_mouse():
     mouseY = _posInfo[0].Y
     screenY = _posInfo[1].Y
     client = VIEWPORT.ClientToWorld(_posInfo[3])
-    tup = Intersect.Intersection.LinePlane(client,CPLANE)
+    tup = Intersect.Intersection.LinePlane(client,_ghenv.LocalScope.CPLANE)
     if tup[0]:
         ptOnPlane = client.PointAt(tup[1])
-    mouseX = ptOnPlane.X
-    mouseY = ptOnPlane.Y
+        mouseX = ptOnPlane.X
+        mouseY = ptOnPlane.Y
     mousePressed = isMousePressed()
     mouseMoved = pmouseX != mouseX or pmouseY != mouseY
     mouseDragged = mouseMoved and mousePressed
@@ -104,11 +104,11 @@ def show_grid(switch = False):
     " turn off cplane grid "
     Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionGridVisible = switch
     Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionAxesVisible = switch
-def get_class(ghenv):
-    param = ghenv.Component.Params.Input[1]
+def get_class():
+    param = _ghenv.Component.Params.Input[1]
     for data in param.VolatileData.AllData(True):
         cls =  data.Value
-        ghenv.Script.SetVariable(cls.__name__, cls)
+        _ghenv.Script.SetVariable(cls.__name__, cls)
 def _clear():
     for uniquevar in [var for var in globals().copy() if var[0] != "_"]:
         del globals()[uniquevar]
@@ -146,8 +146,7 @@ def toPolyline(curve,maxAngleRadians = 0.1, tolerance = 0.1):
 ## basic processing function ##
 def toggleColor(state = False):
     "cancel color out mode"
-    global COLOR_OUTPUT
-    COLOR_OUTPUT = state
+    _ghenv.LocalScope.COLOR_OUTPUT = state
 def color(*args):
     "accept : (gray), (gray,alphy), (r,g,b), (r,g,b,a)\
     return : Color"
@@ -174,44 +173,42 @@ def background(*args):
     _clearOutput()
 def size(w,h,mode=P2D,name='processing'):
     " set size of new viewport "
-    global width,height,VIEWPORT
-    width = w
-    height = h
-    VIEWPORT = NewView(name,mode).ActiveViewport
+    assign_to_gh('width', w)
+    assign_to_gh('height',h)
+    assign_to_gh('VIEWPORT', NewView(name,mode).ActiveViewport)
 #### add display
 def _clearOutput():
     DISPLAY.Clear()
     DISPLAY.Dispose
-    GeoOut.Clear()
-    ColorOut.Clear()
+    _ghenv.LocalScope.GeoOut.Clear()
+    _ghenv.LocalScope.ColorOut.Clear()
 def Display(anyCurve):
     " overall display "
-    if GEOMETRY_OUTPUT:
+    if _ghenv.LocalScope.GEOMETRY_OUTPUT:
         # add diffrent fill and outline to different GeoOut bracnch
-        i = GeoOut.BranchCount
-        GeoOut.Add(anyCurve,Path(i))
-        ColorOut.Add(STROKE_COLOR,Path(i))
+        i = _ghenv.LocalScope.GeoOut.BranchCount
+        _ghenv.LocalScope.GeoOut.Add(anyCurve,Path(i))
+        _ghenv.LocalScope.ColorOut.Add(_ghenv.LocalScope.STROKE_COLOR,Path(i))
         if IS_FILL:
-            GeoOut.Add(_fill_geometry(anyCurve),Path(i))
-            ColorOut.Add(FILL_COLOR,Path(i))
-    if COLOR_OUTPUT:
-        _fill_color(anyCurve,IS_FILL,IS_STROKE)
+            _ghenv.LocalScope.GeoOut.Add(_fill_geometry(anyCurve),Path(i))
+            _ghenv.LocalScope.ColorOut.Add(_ghenv.LocalScope.FILL_COLOR,Path(i))
+    if _ghenv.LocalScope.COLOR_OUTPUT:
+        _fill_color(anyCurve,_ghenv.LocalScope.IS_FILL,_ghenv.LocalScope.IS_STROKE)
 def Fill(curve,colour=None,real = True,brep = False):
     " rhino version fill "
     if not colour:
-        colour = FILL_COLOR
+        colour = _ghenv.LocalScope.FILL_COLOR
     if real:
         _fill_geometry(curve,brep)
     else:
         _fill_color(curve)
 def noFill():
-    global FILL_COLOR
-    FILL_COLOR = Color.FromArgb(0,0,0,0)
+    assign_to_gh('FILL_COLOR', Color.FromArgb(0,0,0,0))
 def fill(*args):
     if isinstance(args[0], Color):
-        add_to_gh("FILL_COLOR",args[0])
+        assign_to_gh("FILL_COLOR",args[0])
         return
-    add_to_gh("FILL_COLOR",color(*args))
+    assign_to_gh("FILL_COLOR",color(*args))
 def _fill_geometry(planar_curve,brep = False):
     if brep:
         planar_curve = planar_curve.ToNurbsCurve()
@@ -235,24 +232,26 @@ def Stroke(curve,colour=None,weight=None):
     c = curve.ToNurbsCurve()
     DISPLAY.AddCurve(c,colour,weight)
 def stroke(*args):
-    global STROKE_COLOR
-    STROKE_COLOR = color(*args)
+    assign_to_gh('STROKE_COLOR',color(*args))
 def noStroke():
-    global STROKE_COLOR
-    STROKE_COLOR = Color.FromArgb(0,0,0,0)
+    assign_to_gh('STROKE_COLOR',Color.FromArgb(0,0,0,0))
 def strokeWeight(weight):
-    global STROKE_WEIGHT
-    STROKE_WEIGHT = weight
+    assign_to_gh('STROKE_WEIGHT',weight)
 def pushStyle():
-    STYLESTACK.append((FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE))
+    _ghenv.LocalScope.STYLESTACK.append(
+                      (_ghenv.LocalScope.FILL_COLOR,
+                       _ghenv.LocalScope.STROKE_COLOR,
+                       _ghenv.LocalScope.STROKE_WEIGHT,
+                       _ghenv.LocalScope.IS_FILL,
+                       _ghenv.LocalScope.IS_STROKE))
 def popStyle():
-    global FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE
+    STYLESTACK = _ghenv.LocalScope.STYLESTACK
     if STYLESTACK:
-        FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE = STYLESTACK.pop()
-def getStyle():
-    "return (FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE)"
-    return (FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE)
-
+        (_ghenv.LocalScope.FILL_COLOR,
+         _ghenv.LocalScope.STROKE_COLOR,
+         _ghenv.LocalScope.STROKE_WEIGHT,
+         _ghenv.LocalScope.IS_FILL,
+         _ghenv.LocalScope.IS_STROKE) = STYLESTACK.pop()
 ### create shape api ###
 class Shape(Curve):
     def __init__():
@@ -262,11 +261,12 @@ def createShape():
     return Shape()
 def beginShape(kind = None):
     #! add fiiled polygon
+    _SHAPESTACK = _ghenv.LocalScope._SHAPESTACK
     num = len(_SHAPESTACK)
     _SHAPESTACK.append([])
-    _CSHAPE = _SHAPESTACK[num]
+    assign_to_gh('_CSHAPE', _SHAPESTACK[num])
 def vertex(x,y,z):
-    _CSHAPE.append(Point3d(x,y,z))
+    _ghenv.LocalScope._CSHAPE.append(Point3d(x,y,z))
 def endShape():
     pline = Polyline(_SHAPESTACK.pop())
     if AUTO_DISPLAY:
@@ -275,13 +275,14 @@ def endShape():
 ### matrix manipulation ###
 def translate(*args):
     "translate CPLANE with (x,y,[z]) or Vector3d"
+    CPLANE = _ghenv.LocalScope.CPLANE
     if isinstance(args[0],Vector3d):
         CPLANE.Translate(Vector3d)
     else:
         CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)))
 def rotate(rad,axis=None,center=None):
     "return True if success"
-    cplane = VIEWPORT.ConstructionPlane()
+    cplane = _ghenv.LocalScope.CPLANE
     if not axis:
         axis = cplane.ZAxis
     if not center:
@@ -289,14 +290,14 @@ def rotate(rad,axis=None,center=None):
     return cplane.Rotate(rad,axis,center)
 
 def pushMatrix():
-    _CPLANESTACK.append(Plane(CPLANE))
+    _ghenv.LocalScope._CPLANESTACK.append(Plane(_ghenv.LocalScope.CPLANE))
 def popMatrix():
-    global CPLANE
+    _CPLANESTACK = _ghenv.LocalScope._CPLANESTACK
     if _CPLANESTACK:
-        CPLANE = _CPLANESTACK.pop()
+        assign_to_gh('CPLANE',_CPLANESTACK.pop())
 def setMatrix(plane):
     "change CPLANE to plane"
-    CPLANE = plane
+    assign_to_gh('CPLANE',plane)
 ### time related ###
 def frameRate(fps):
     ms = 1000/fps
@@ -311,7 +312,7 @@ def dist(pt1,pt2):
 class PVector():
     " processing PVector interface as Vector3d "
     def __init__(self,*args):
-        __data = Vector3d(CPLANE.PointAt(*args))
+        __data = Vector3d(_ghenv.LocalScope.CPLANE.PointAt(*args))
     def __repr__(self):
         return '__data'
     def __str__(self):
@@ -335,10 +336,10 @@ class PVector():
     def normalize(self):
         return Unitize()
     def rotate(self,radians):
-        Rotate(radians,CPLANE.ZAxis)
+        Rotate(radians,_ghenv.LocalScope.CPLANE.ZAxis)
     @classmethod
     def angleBetween(cls,a,b):
-        return Vector3d.VectorAngle(a,b,CPLANE)
+        return Vector3d.VectorAngle(a,b,_ghenv.LocalScope.CPLANE)
     @classmethod
     def random2D(cls):
         theta = uniform(0,2*PI)
@@ -352,6 +353,7 @@ class PVector():
 # basic geometry drawing
 def arc(x,y,w,h,start,stop,mode='PIE'):
     " construct a elliptic arc "
+    CPLANE = _ghenv.LocalScope.CPLANE
     if w == h:
         res = Arc(Circle(CPLANE,w),Interval(start,stop))
         spt = res.StartPoint
@@ -376,19 +378,19 @@ def arc(x,y,w,h,start,stop,mode='PIE'):
     Display(res)
 def line(x1,y1,x2,y2,z1=0,z2=0):
     " simple line "
-    pl = Plane(CPLANE)
+    pl = Plane(_ghenv.LocalScope.CPLANE)
     ln = Line(pl.PointAt(x1,y1,z1),pl.PointAt(x2,y2,z2))
     if AUTO_DISPLAY:
         Display(ln)
     return ln
 
 def rect(x1,y1,x2,y2):
-    rec = Rectangle3d(CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
+    rec = Rectangle3d(_ghenv.LocalScope.CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
     if AUTO_DISPLAY:
         Display(rec)
     return rec
 def ellipse(x,y,a,b):
-    pl = Plane(CPLANE)
+    pl = Plane(_ghenv.LocalScope.CPLANE)
     pl.Translate(Vector3d(x,y,0))
     ell = Ellipse(pl,a,b)
     if AUTO_DISPLAY:
@@ -398,10 +400,10 @@ def text(content,x,y,z=0,height=None):
     " !TODO add text to screen "
     te = TextEntity()
     te.Text = content
-    te.Plane = CPLANE
+    te.Plane = _ghenv.LocalScope.CPLANE
     if height:
         te.TextHeight = height
-    te.Translate(Vector3d(CPLANE.PointAt(x,y,z)))
+    te.Translate(Vector3d(_ghenv.LocalScope.CPLANE.PointAt(x,y,z)))
     txtcrvs = Curve.JoinCurves(te.Explode())
     if AUTO_DISPLAY:
         for crv in txtcrvs:
@@ -410,45 +412,44 @@ def text(content,x,y,z=0,height=None):
 
 ### help func?
 def constrain_region( pt,geo):
-    Max = geo.GetBoundingBox(CPLANE).Max
-    Min = geo.GetBoundingBox(CPLANE).Min
+    Max = geo.GetBoundingBox(_ghenv.LocalScope.CPLANE).Max
+    Min = geo.GetBoundingBox(_ghenv.LocalScope.CPLANE).Min
     pt.X = Rhino.RhinoMath.Clamp(pt.X,Min.X,Max.X)
     pt.Y = Rhino.RhinoMath.Clamp(pt.Y,Min.Y,Max.Y)
     pt.Z = Rhino.RhinoMath.Clamp(pt.Z,Min.Z,Max.Z)
     return pt
 
-def add_to_gh(k,v):
+def assign_to_gh(k,v):
     _ghenv.Script.SetVariable(k,v)
-def setting(this=_ghenv,name = 'processing',autodisplay = True):
-    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,_CPLANESTACK,VIEWPORT
-    send_all_name_to(this)
-    _time = time.clock()
-    isLoop = True
+def assign_all_to_gh(**kwargs):
+    for k,v in kwargs.items():
+        assign_to_gh(k,v)
+def setting(name = 'processing',autodisplay = True):
+    global VIEWPORT
+    _ghenv.LocalScope._time = time.clock()
+    _ghenv.LocalScope.isLoop = True
     VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
-    LOOP_COUNT = 0
-    _CPLANESTACK = []
-    AUTO_DISPLAY = autodisplay
+    _ghenv.LocalScope.LOOP_COUNT = 0
+    _ghenv.LocalScope._CPLANESTACK = []
+    _ghenv.LocalScope.AUTO_DISPLAY = autodisplay
     _clearOutput()
-    show_grid()
-    get_class(this)
-def send_all_name_to(ghenv):
+    get_class()
+def send_all_name_to_gh():
     for k,v in globals().items():
-        ghenv.Script.SetVariable(k,v)
+        _ghenv.Script.SetVariable(k,v)
 def noLoop():
-    global isLoop
-    isLoop = False
+    _ghenv.LocalScope.isLoop = False
 def GO(ghenv):
     global _ghenv
     _ghenv = ghenv
-    param = ghenv.Component.Params.Input[0]
-    RESET = True
+    send_all_name_to_gh()
+    param = _ghenv.Component.Params.Input[0]
     for data in param.VolatileData.AllData(True):
         RESET = data
     if RESET.Value == True:
-        setting(ghenv)
-        ghenv.LocalScope.setup()
+        setting()
+        _ghenv.LocalScope.setup()
     elif isLoop:
-        global LOOP_COUNT
-        LOOP_COUNT += 1
+        _ghenv.LocalScope.LOOP_COUNT += 1
         update_mouse()
-        ghenv.LocalScope.draw()
+        _ghenv.LocalScope.draw()
