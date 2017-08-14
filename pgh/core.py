@@ -46,28 +46,31 @@ if "DISPLAY" not in sc.sticky:
 DISPLAY = sc.sticky["DISPLAY"]
 
 ## display setting
-class Setting:
-    # organize setting here
+class Style:
+    def __init__(self):
+        self.IS_FILL = True
+        self.FILL_COLOR = Color.FromArgb(255,255,255)
+        self.IS_STROKE = True
+        self.STROKE_COLOR = Color.FromArgb(0,0,0,0)
+        self.STROKE_WEIGHT = 1
+style = Style()
+STYLESTACK = []
+
+
+_CPLANESTACK = [Plane.WorldXY]
+CPLANE = _CPLANESTACK[0]
 AUTO_DISPLAY = True
 GEOMETRY_OUTPUT = True
 COLOR_OUTPUT = False
-IS_FILL = True
-IS_STROKE = True
 GeoOut = DataTree[object]()
 ColorOut = DataTree[Color]()
-STROKE_WEIGHT = 1
-BACKGROUND_COLOR = Color.FromArgb(180,180,180)
-FILL_COLOR = Color.FromArgb(255,255,255)
-STROKE_COLOR = Color.FromArgb(0,0,0)
-STYLESTACK = []
 ## general setting
 TORLERENCE = Rhino.RhinoDoc.ActiveDoc.PageAbsoluteTolerance
 VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
 thisDoc = Rhino.RhinoDoc.ActiveDoc
 _MODE = "CPLANE"
 LOOP_COUNT = 0
-CPLANE = Plane.WorldXY
-_CPLANESTACK = []
+isLoop = True
 # mouse variable
 _posInfo = rs.GetCursorPos()
 mouseX = _posInfo[0].X
@@ -90,6 +93,12 @@ def update_mouse():
     screenX = _posInfo[1].X
     mouseY = _posInfo[0].Y
     screenY = _posInfo[1].Y
+    client = VIEWPORT.ClientToWorld(_posInfo[3])
+    tup = Intersect.Intersection.LinePlane(client,CPLANE)
+    if tup[0]:
+        ptOnPlane = client.PointAt(tup[1])
+    mouseX = ptOnPlane.X
+    mouseY = ptOnPlane.Y
     mousePressed = isMousePressed()
     mouseMoved = pmouseX != mouseX or pmouseY != mouseY
     mouseDragged = mouseMoved and mousePressed
@@ -103,10 +112,12 @@ def get_class(ghenv):
     param = ghenv.Component.Params.Input[1]
     for data in param.VolatileData.AllData(True):
         cls =  data.Value
-        globals().update({cls.__name__ : cls})
+        ghenv.Script.SetVariable(cls.__name__, cls)
 def _clear():
     for uniquevar in [var for var in globals().copy() if var[0] != "_"]:
         del globals()[uniquevar]
+def glob():
+    print(globals())
 def _time_test(fn,arg,time = 1000):
     before = time.clock()
     for i in range(time):
@@ -150,7 +161,8 @@ def color(*args):
     if length == 1:
         if isinstance(args[0],Color):
             return args[0]
-        return Color.FromArgb(args[0],args[0],args[0])
+        else:
+            return Color.FromArgb(args[0],args[0],args[0])
     elif length == 2:
         return Color.FromArgb(args[1],args[0],args[0],args[0])
     elif length == 3:
@@ -171,8 +183,7 @@ def size(w,h,name = 'processing'):
     global width,height,VIEWPORT
     width = w
     height = h
-    VIEWPORT = NewView(name)
-
+    VIEWPORT = NewView(name).ActiveViewport
 
 #### add display
 def _clearOutput():
@@ -186,29 +197,27 @@ def Display(anyCurve):
         # add diffrent fill and outline to different GeoOut bracnch
         i = GeoOut.BranchCount
         GeoOut.Add(anyCurve,Path(i))
-        ColorOut.Add(STROKE_COLOR,Path(i))
-        if IS_FILL:
+        ColorOut.Add(style.STROKE_COLOR,Path(i))
+        if style.IS_FILL:
             GeoOut.Add(_fill_geometry(anyCurve),Path(i))
-            ColorOut.Add(FILL_COLOR,Path(i))
+            ColorOut.Add(style.FILL_COLOR,Path(i))
     if COLOR_OUTPUT:
-        _fill_color(anyCurve,IS_FILL,IS_STROKE)
+        _fill_color(anyCurve,style.IS_FILL,style.IS_STROKE)
 def Fill(curve,colour=None,real = True,brep = False):
     " rhino version fill "
     if not colour:
-        colour = FILL_COLOR
+        colour = style.FILL_COLOR
     if real:
         _fill_geometry(curve,brep)
     else:
         _fill_color(curve)
 def noFill():
-    global FILL_COLOR
-    FILL_COLOR = Color.FromArgb(0,0,0,0)
+    style.FILL_COLOR = Color.FromArgb(0,0,0,0)
 def fill(*args):
-    global FILL_COLOR
     if isinstance(args[0], Color):
-        FILL_COLOR = args[0]
+        style.FILL_COLOR = args[0]
         return
-    FILL_COLOR = color(*args)
+    style.FILL_COLOR = color(*args)
 def _fill_geometry(planar_curve,brep = False):
     if brep:
         planar_curve = planar_curve.ToNurbsCurve()
@@ -220,36 +229,30 @@ def _fill_geometry(planar_curve,brep = False):
         return Mesh.CreateFromClosedPolyline(pline)
 def _fill_color(curve,fill = True,stroke = True):
     pline = convert_polyline(curve)
-    DISPLAY.AddPolygon(pline.ToArray(),FILL_COLOR,STROKE_COLOR,fill,False)
+    DISPLAY.AddPolygon(pline.ToArray(),style.FILL_COLOR,style.STROKE_COLOR,fill,False)
     if stroke:
-        DISPLAY.AddCurve(pline.ToNurbsCurve(),FILL_COLOR,STROKE_WEIGHT)
+        DISPLAY.AddCurve(pline.ToNurbsCurve(),style.FILL_COLOR,style.STROKE_WEIGHT)
 
 def Stroke(curve,colour=None,weight=None):
-    global STROKE_WEIGHT,STROKE_COLOR
     if not colour:
-        colour=STROKE_COLOR
+        colour=style.STROKE_COLOR
     if not weight:
-        weight=STROKE_WEIGHT
+        weight=style.STROKE_WEIGHT
     c = curve.ToNurbsCurve()
     DISPLAY.AddCurve(c,colour,weight)
 def stroke(*args):
-    global STROKE_COLOR
-    STROKE_COLOR = color(*args)
+    style.STROKE_COLOR = color(*args)
 def noStroke():
-    global STROKE_COLOR
-    STROKE_COLOR = Color.FromArgb(0,0,0,0)
+    style.STROKE_COLOR = Color.FromArgb(0,0,0,0)
 def strokeWeight(weight):
-    global STROKE_WEIGHT
-    STROKE_WEIGHT = weight
+    style.STROKE_WEIGHT = weight
 def pushStyle():
-    STYLESTACK.append((FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE))
+    STYLESTACK.append(style)
 def popStyle():
-    global FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE
+    global style
     if STYLESTACK:
-        FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE = STYLESTACK.pop()
-def getStyle():
-    "return (FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE)"
-    return (FILL_COLOR,STROKE_COLOR,STROKE_WEIGHT,IS_FILL,IS_STROKE)
+        style = STYLESTACK.pop()
+
 ### create shape api ###
 def beginShape(kind = None):
     #! add fiiled polygon
@@ -269,13 +272,25 @@ def translate(*args):
         CPLANE.Translate(Vector3d)
     else:
         CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)))
+def rotate(rad,axis=None,center=None):
+    "return True if success"
+    cplane = VIEWPORT.ConstructionPlane()
+    if not axis:
+        axis = cplane.ZAxis
+    if not center:
+        center = cplane.Origin
+    return cplane.Rotate(rad,axis,center)
+
 def pushMatrix():
-    _CPLANESTACK.append(CPLANE)
+    "_CPLANESTACK.append(CPLANE)"
+    return VIEWPORT.PushConstructionPlane(VIEWPORT.GetConstructionPlane())
 def popMatrix():
-    CPLANE = _CPLANESTACK.pop() if _CPLANESTACK else CPLANE
-def project(plane):
+    """global CPLANE
+    CPLANE = _CPLANESTACK.pop() if len(_CPLANESTACK)>1"""
+    return VIEWPORT.PopConstructionPlane()
+def setMatrix(plane):
     "change CPLANE to plane"
-    pass
+    return VIEWPORT.SetConstructionPlane(plane)
 ### time related ###
 def frameRate(fps):
     ms = 1000/fps
@@ -360,6 +375,7 @@ def line(x1,y1,x2,y2,z1=0,z2=0):
     if AUTO_DISPLAY:
         Display(ln)
     return ln
+
 def rect(x1,y1,x2,y2):
     rec = Rectangle3d(CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
     if AUTO_DISPLAY:
@@ -372,17 +388,20 @@ def ellipse(x,y,a,b):
     if AUTO_DISPLAY:
         Display(ell)
     return ell
-def text(content,x,y,z=0):
+def text(content,x,y,z=0,height=None):
     " !TODO add text to screen "
     te = TextEntity()
     te.Text = content
     te.Plane = CPLANE
+    if height:
+        te.TextHeight = height
     te.Translate(Vector3d(CPLANE.PointAt(x,y,z)))
     txtcrvs = Curve.JoinCurves(te.Explode())
     if AUTO_DISPLAY:
         for crv in txtcrvs:
             Display(crv)
     return txtcrvs
+
 ### help func?
 def constrain_region( pt,geo):
     Max = geo.GetBoundingBox(CPLANE).Max
@@ -394,6 +413,8 @@ def constrain_region( pt,geo):
 
 ### decorator for simplicity
 def loop(fn):
+    if not isLoop:
+        return # should stop timer instead
     global LOOP_COUNT
     LOOP_COUNT += 1
     update_mouse()
@@ -401,32 +422,46 @@ def loop(fn):
     def wrapped():
         fn()
     return wrapped
-
-def setting(ghenv,name = 'processing',autodisplay = True):
-    global LOOP_COUNT,_time,AUTO_DISPLAY,CPLANE,_CPLANESTACK,ghenv
+def _insureRightOutput(ghenv):
+    # slove multiply instance problem
+    global GeoOut,ColorOut
+    GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
+    ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
+def setting(this,name = 'processing',autodisplay = True):
+    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,_CPLANESTACK,VIEWPORT
     _time = time.clock()
-    _clearOutput()
+    isLoop = True
+    VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
     LOOP_COUNT = 0
-    CPLANE = Plane.WorldXY
     _CPLANESTACK = []
     AUTO_DISPLAY = autodisplay
+    _insureRightOutput(this)
+    _clearOutput()
     show_grid()
-    get_class(ghenv)
+    get_class(this)
 
 def noLoop():
-    pass
-"""
-def setup():
-    pass
-def draw():
-    pass
+    global isLoop
+    isLoop = False
 def GO(ghenv):
     param = ghenv.Component.Params.Input[0]
+    RESET = False
     for data in param.VolatileData.AllData(True):
         RESET = data
-    if RESET:
+    if RESET.Value == True:
+        try:
+            _setup = ghenv.LocalScope.setup
+        except MissingMemberException:
+            pass
         setting(this = ghenv)
-        setup()
-    else:
-        draw()
-"""
+        _setup()
+    elif isLoop:
+        try:
+            _draw = ghenv.LocalScope.draw
+        except MissingMemberException:
+            return
+        global LOOP_COUNT
+        _insureRightOutput(ghenv)
+        LOOP_COUNT += 1
+        update_mouse()
+        _draw()
