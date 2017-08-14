@@ -34,12 +34,12 @@ def noise(*args):
 def noiseDetial():
     raise NotImplemented
 
-# accessible global var
+# viewport size
 width = 640
 height = 800
+## global setting
 P2D = Rhino.Display.DefinedViewportProjection.Top
 P3D = Rhino.Display.DefinedViewportProjection.Perspective
-## global setting
 if "DISPLAY" not in sc.sticky:
     sc.sticky["DISPLAY"] = Rhino.Display.CustomDisplay(True)
 DISPLAY = sc.sticky["DISPLAY"]
@@ -56,46 +56,28 @@ style = Style()
 STYLESTACK = []
 
 
-_CPLANESTACK = [Plane.WorldXY]
-CPLANE = _CPLANESTACK[0]
-
+CPLANES = [Plane.WorldXY]
+#current cplane = CPLANES[-1]
 AUTO_DISPLAY = True
 GEOMETRY_OUTPUT = True
 COLOR_OUTPUT = False
-GeoOut = DataTree[object]()
-ColorOut = DataTree[Color]()
+
 ## general setting
 TORLERENCE = Rhino.RhinoDoc.ActiveDoc.PageAbsoluteTolerance
-VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
-thisDoc = Rhino.RhinoDoc.ActiveDoc
-LOOP_COUNT = 0
-isLoop = True
 # mouse variable
-
-_posInfo = rs.GetCursorPos()
-mouseX = _posInfo[0].X
-mouseY = _posInfo[0].Y
-pmouseX = mouseX
-pmouseY = mouseY
-mousePressed = False
-_pmousePressed = False
-mouseMoved = False
-mouseDragged = False
-mouseClicked = False
 def update_mouse():
     global mouseX,screenX,mouseY,screenY,pmouseX,pmouseY,\
            _pmousePressed,mousePressed,mouseMoved,mouseDragged,mouseClicked
     pmouseX = mouseX
     pmouseY = mouseY
     _pmousePressed = mousePressed
-    print 'befroe',mousePressed
     _posInfo = rs.GetCursorPos()
     mouseX = _posInfo[0].X
     screenX = _posInfo[1].X
     mouseY = _posInfo[0].Y
     screenY = _posInfo[1].Y
     client = VIEWPORT.ClientToWorld(_posInfo[3])
-    tup = Intersect.Intersection.LinePlane(client,CPLANE)
+    tup = Intersect.Intersection.LinePlane(client,CPLANES[-1])
     if tup[0]:
         ptOnPlane = client.PointAt(tup[1])
         mouseX = ptOnPlane.X
@@ -104,9 +86,7 @@ def update_mouse():
     mouseMoved = pmouseX != mouseX or pmouseY != mouseY
     mouseDragged = mouseMoved and mousePressed
     mouseClicked = _pmousePressed and not mousePressed
-    print _pmousePressed,mousePressed
-    print mouseClicked
-print 'outer',mousePressed
+
 # buildin func
 def show_grid(switch = False):
     " turn off cplane grid "
@@ -138,7 +118,7 @@ def NewView(name,Projection,screenX = 0,screenY = 0,seperate = True):
         Projection,
         System.Drawing.Rectangle(screenX,screenY,screenX+width,screenY+height),
         seperate)
-        viewRect = Rectangle3d(CPLANE,width,height)
+        viewRect = Rectangle3d(CPLANES[-1],width,height)
         exist.ActiveViewport.ZoomBoundingBox(viewRect.BoundingBox)
     return exist
 def convert_polyline(curve):
@@ -278,11 +258,11 @@ def endShape():
 
 ### matrix manipulation ###
 def translate(*args):
-    "translate CPLANE with (x,y,[z]) or Vector3d"
+    "translate CPLANES[-1] with (x,y,[z]) or Vector3d"
     if isinstance(args[0],Vector3d):
-        CPLANE.Translate(Vector3d)
+        CPLANES[-1].Translate(Vector3d)
     else:
-        CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)))
+        CPLANES[-1].Translate(Vector3d(CPLANES[-1].PointAt(*args)))
 def rotate(rad,axis=None,center=None):
     "return True if success"
     cplane = VIEWPORT.ConstructionPlane()
@@ -293,14 +273,13 @@ def rotate(rad,axis=None,center=None):
     return cplane.Rotate(rad,axis,center)
 
 def pushMatrix():
-    _CPLANESTACK.append(CPLANE)
+    CPLANES.append(CPLANES[-1])
 def popMatrix():
-    global CPLANE
-    CPLANE = _CPLANESTACK.pop() if len(_CPLANESTACK)>1 else _CPLANESTACK[0]
+    if len(CPLANES)>1:
+        CPLANES.pop()
 def setMatrix(plane):
-    "change CPLANE to plane"
-    global CPLANE
-    CPLANE = plane
+    "change CPLANES[-1] to given plane"
+    CPLANES[-1] = plane
 ### time related ###
 def frameRate(fps):
     ms = 1000/fps
@@ -315,7 +294,7 @@ def dist(pt1,pt2):
 class PVector():
     " processing PVector interface as Vector3d "
     def __init__(self,*args):
-        self.__data = Vector3d(CPLANE.PointAt(*args))
+        self.__data = Vector3d(CPLANES[-1].PointAt(*args))
     def __repr__(self):
         return 'self.__data'
     def __str__(self):
@@ -339,10 +318,10 @@ class PVector():
     def normalize(self):
         return self.Unitize()
     def rotate(self,radians):
-        self.Rotate(radians,CPLANE.ZAxis)
+        self.Rotate(radians,CPLANES[-1].ZAxis)
     @classmethod
     def angleBetween(cls,a,b):
-        return Vector3d.VectorAngle(a,b,CPLANE)
+        return Vector3d.VectorAngle(a,b,CPLANES[-1])
     @classmethod
     def random2D(cls):
         theta = uniform(0,2*PI)
@@ -363,14 +342,14 @@ def image(img,x,y):
 def arc(x,y,w,h,start,stop,mode='PIE'):
     " construct a elliptic arc "
     if w == h:
-        res = Arc(Circle(CPLANE,w),Interval(start,stop))
+        res = Arc(Circle(CPLANES[-1],w),Interval(start,stop))
         spt = res.StartPoint
         ept = res.EndPoint
-        cpt = CPLANE.Origin
+        cpt = CPLANES[-1].Origin
     else:
         a = w/2
         b = h/2
-        pl = Plane(CPLANE)
+        pl = Plane(CPLANES[-1])
         pl.Translate(Vector3d(x,y,0))
         cpt = pl.Origin
         spt = pl.PointAt( a*math.cos(start),b*math.sin(start),0 )
@@ -386,19 +365,19 @@ def arc(x,y,w,h,start,stop,mode='PIE'):
     Display(res)
 def line(x1,y1,x2,y2,z1=0,z2=0):
     " simple line "
-    pl = Plane(CPLANE)
+    pl = Plane(CPLANES[-1])
     ln = Line(pl.PointAt(x1,y1,z1),pl.PointAt(x2,y2,z2))
     if AUTO_DISPLAY:
         Display(ln)
     return ln
 
 def rect(x1,y1,x2,y2):
-    rec = Rectangle3d(CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
+    rec = Rectangle3d(CPLANES[-1],Point3d(x1,y1,0),Point3d(x2,y2,0))
     if AUTO_DISPLAY:
         Display(rec)
     return rec
 def ellipse(x,y,a,b):
-    pl = Plane(CPLANE)
+    pl = Plane(CPLANES[-1])
     pl.Translate(Vector3d(x,y,0))
     ell = Ellipse(pl,a,b)
     if AUTO_DISPLAY:
@@ -408,10 +387,10 @@ def text(content,x,y,z=0,height=None):
     " add text to screen "
     te = TextEntity()
     te.Text = content
-    te.Plane = CPLANE
+    te.Plane = CPLANES[-1]
     if height:
         te.TextHeight = height
-    te.Translate(Vector3d(CPLANE.PointAt(x,y,z)))
+    te.Translate(Vector3d(CPLANES[-1].PointAt(x,y,z)))
     txtcrvs = Curve.JoinCurves(te.Explode())
     if AUTO_DISPLAY:
         for crv in txtcrvs:
@@ -420,8 +399,8 @@ def text(content,x,y,z=0,height=None):
 
 ### help func?
 def constrain_region( pt,geo):
-    Max = geo.GetBoundingBox(CPLANE).Max
-    Min = geo.GetBoundingBox(CPLANE).Min
+    Max = geo.GetBoundingBox(CPLANES[-1]).Max
+    Min = geo.GetBoundingBox(CPLANES[-1]).Min
     pt.X = Rhino.RhinoMath.Clamp(pt.X,Min.X,Max.X)
     pt.Y = Rhino.RhinoMath.Clamp(pt.Y,Min.Y,Max.Y)
     pt.Z = Rhino.RhinoMath.Clamp(pt.Z,Min.Z,Max.Z)
@@ -434,7 +413,7 @@ def loop(fn):
     global LOOP_COUNT
     LOOP_COUNT += 1
     update_mouse()
-    if _MODE == 'overlay' : CPLANE.OriginZ += TORLERENCE
+    if _MODE == 'overlay' : CPLANES[-1].OriginZ += TORLERENCE
     def wrapped():
         fn()
     return wrapped
@@ -444,12 +423,12 @@ def _insureRightOutput(ghenv):
     GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
     ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
 def initialize(this,name = 'processing',autodisplay = True):
-    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,_CPLANESTACK,VIEWPORT
+    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,CPLANES,VIEWPORT
     _time = time.clock()
     isLoop = True
     VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
     LOOP_COUNT = 0
-    _CPLANESTACK = []
+    CPLANES = [Plane.WorldXY]
     AUTO_DISPLAY = autodisplay
     _insureRightOutput(this)
     _clearOutput()
