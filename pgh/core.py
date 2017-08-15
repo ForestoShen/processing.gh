@@ -280,7 +280,7 @@ def translate(*args):
     if isinstance(args[0],Vector3d):
         CPLANE.Translate(Vector3d)
     else:
-        CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)))
+        CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)-CPLANE.Origin))
 def rotate(rad,axis=None,center=None):
     "return True if success"
     cplane = _ghl.CPLANE
@@ -419,7 +419,11 @@ def constrain_region( pt,geo):
     pt.Y = Rhino.RhinoMath.Clamp(pt.Y,Min.Y,Max.Y)
     pt.Z = Rhino.RhinoMath.Clamp(pt.Z,Min.Z,Max.Z)
     return pt
-
+def _insureRightOutput(ghenv):
+    # slove multiply instance problem
+    global GeoOut,ColorOut
+    GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
+    ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
 def assign_to_gh(k,v):
     _ghenv.Script.SetVariable(k,v)
 def assign_all_to_gh(**kwargs):
@@ -434,6 +438,7 @@ def setting(name = 'processing',autodisplay = True):
     _ghl.LOOP_COUNT = 0
     _ghl._CPLANESTACK = []
     _ghl.AUTO_DISPLAY = autodisplay
+    _insureRightOutput(_ghenv)
     _clearOutput()
     get_class()
 def send_all_name_to_gh():
