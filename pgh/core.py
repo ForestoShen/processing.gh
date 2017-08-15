@@ -130,7 +130,7 @@ def NewView(name,Projection,screenX = 0,screenY = 0,seperate = True):
         Projection,
         System.Drawing.Rectangle(screenX,screenY,screenX+width,screenY+height),
         seperate)
-        viewRect = Rectangle3d(CPLANES[-1],width,height)
+        viewRect = Rectangle3d(_ghl.CPLANE,width,height)
         exist.ActiveViewport.ZoomBoundingBox(viewRect.BoundingBox)
     return exist
 def convert_polyline(curve):
@@ -437,6 +437,7 @@ def setting(name = 'processing',autodisplay = True):
     VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
     _ghl.LOOP_COUNT = 0
     _ghl._CPLANESTACK = []
+    _ghl.CPLANE = Plane.WorldXY
     _ghl.AUTO_DISPLAY = autodisplay
     _insureRightOutput(_ghenv)
     _clearOutput()
@@ -455,7 +456,10 @@ def GO(ghenv):
     if RESET.Value == True:
         _ghl = _ghenv.LocalScope
         setting()
+        print 'here',CPLANE
         _ghl.setup()
+        print 'after',CPLANE
+        print _ghl._CPLANESTACK
     elif isLoop:
         _ghl.LOOP_COUNT += 1
         update_mouse()
