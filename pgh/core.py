@@ -13,13 +13,13 @@ PI = math.pi
 constrain = Rhino.RhinoMath.Clamp
 import System.Drawing.Color as Color
 import System.Drawing.Rectangle
-import perlin
+import pgh.perlin
 from random import seed as randomSeed
 from random import gauss as randomGaussian
 from random import shuffle, choice
 from random import uniform
-from interact import *
-Simplex = perlin.SimplexNoise()
+from pgh.interact import *
+Simplex = pgh.perlin.SimplexNoise()
 def random(a = 1,b = 0):
     "random(a,b)->[a,b], random(a)->[0,a], random()->[0,1]"
     return uniform(a,b)
@@ -279,7 +279,7 @@ def translate(*args):
     if isinstance(args[0],Vector3d):
         CPLANE.Translate(Vector3d)
     else:
-        CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)))
+        CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)-CPLANE.Origin))
 def rotate(rad,axis=None,center=None):
     "return True if success"
     cplane = VIEWPORT.ConstructionPlane()
@@ -451,22 +451,33 @@ def initialize(this,name = 'processing',autodisplay = True):
     _insureRightOutput(this)
     _clearOutput()
     get_class(this)
-
+def glob():
+    return globals()
+def recive_from_gh(ghenv):
+    ## get ALL var overwrite this
+    global_dict = globals()
+    for name in ghenv.Script.GetVariableNames():
+        global_dict.update({name:ghenv.Script.GetVariable(name)})
 def noLoop():
     global isLoop
     isLoop = False
+def setup():
+    print "dummy setup"
+    noLoop()
+def draw():
+    print "dummy draw"
+    noLoop()
+def get_info():
+    print LOOP_COUNT
 def GO(ghenv):
     param = ghenv.Component.Params.Input[0]
-    RESET = False
+    RESET = True
     for data in param.VolatileData.AllData(True):
-        RESET = data
-    if RESET.Value == True:
-        try:
-            _setup = ghenv.LocalScope.setup
-        except MissingMemberException:
-            pass
+        RESET = data.Value
+    if RESET:
+        recive_from_gh(ghenv)
         initialize(this = ghenv)
-        _setup()
+        setup()
     elif isLoop:
         try:
             _draw = ghenv.LocalScope.draw
@@ -476,4 +487,4 @@ def GO(ghenv):
         _insureRightOutput(ghenv)
         LOOP_COUNT += 1
         update_mouse()
-        _draw()
+        draw()
