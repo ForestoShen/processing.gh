@@ -453,6 +453,9 @@ def initialize(this,name = 'processing',autodisplay = True):
     get_class(this)
 def glob():
     return globals()
+def send_all_name_to_gh(ghenv):
+    for k,v in globals().items():
+        ghenv.Script.SetVariable(k,v)
 def recive_from_gh(ghenv):
     ## get ALL var overwrite this
     global_dict = globals()
@@ -469,6 +472,10 @@ def draw():
     noLoop()
 def get_info():
     print LOOP_COUNT
+import types
+def copy_func(f, name=None):
+    return types.FunctionType(f.func_code, f.func_globals, f.func_name,
+                              f.func_defaults, f.func_closure)
 def GO(ghenv):
     param = ghenv.Component.Params.Input[0]
     RESET = True
@@ -479,12 +486,7 @@ def GO(ghenv):
         initialize(this = ghenv)
         setup()
     elif isLoop:
-        try:
-            _draw = ghenv.LocalScope.draw
-        except MissingMemberException:
-            return
         global LOOP_COUNT
-        _insureRightOutput(ghenv)
         LOOP_COUNT += 1
         update_mouse()
         draw()
