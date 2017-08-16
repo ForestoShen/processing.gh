@@ -20,6 +20,7 @@ from random import shuffle, choice
 from random import uniform
 from pgh.interact import *
 Simplex = pgh.perlin.SimplexNoise()
+import inspect
 def random(a = 1,b = 0):
     "random(a,b)->[a,b], random(a)->[0,a], random()->[0,1]"
     return uniform(a,b)
@@ -438,15 +439,16 @@ def loop(fn):
 def _insureRightOutput(ghenv):
     # slove multiply instance problem
     global GeoOut,ColorOut
-    GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
-    ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
+    GeoOut = ghenv.LocalScope.GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
+    ColorOut = ghenv.LocalScope.ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
 def initialize(this,name = 'processing',autodisplay = True):
-    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,_CPLANESTACK,VIEWPORT
+    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,CPLANE,_CPLANESTACK,VIEWPORT
     _time = time.clock()
     isLoop = True
     VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
     LOOP_COUNT = 0
     _CPLANESTACK = []
+    CPLANE = Plane.WorldXY
     AUTO_DISPLAY = autodisplay
     _insureRightOutput(this)
     _clearOutput()
@@ -458,24 +460,24 @@ def send_all_name_to_gh(ghenv):
         ghenv.Script.SetVariable(k,v)
 def recive_from_gh(ghenv):
     ## get ALL var overwrite this
+    source = ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
+    exec(source)
+    globals().update(locals())
+    """
     global_dict = globals()
     for name in ghenv.Script.GetVariableNames():
-        global_dict.update({name:ghenv.Script.GetVariable(name)})
+        global_dict.update({name:ghenv.Script.GetVariable(name)})"""
+
 def noLoop():
     global isLoop
     isLoop = False
 def setup():
-    print "dummy setup"
+    "run once when RESET == True"
     noLoop()
 def draw():
-    print "dummy draw"
+    "continuous run when RESET == False"
     noLoop()
-def get_info():
-    print LOOP_COUNT
-import types
-def copy_func(f, name=None):
-    return types.FunctionType(f.func_code, f.func_globals, f.func_name,
-                              f.func_defaults, f.func_closure)
+
 def GO(ghenv):
     param = ghenv.Component.Params.Input[0]
     RESET = True
