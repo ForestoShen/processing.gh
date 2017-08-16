@@ -46,6 +46,7 @@ if "DISPLAY" not in sc.sticky:
 DISPLAY = sc.sticky["DISPLAY"]
 _ghenv = None
 all_processing = {}
+all_drawing = {}
 ## display setting
 class Style:
     def __init__(self):
@@ -297,7 +298,7 @@ def rotate(rad,axis=None,center=None):
     return cplane.Rotate(rad,axis,center)
 
 def pushMatrix():
-    _CPLANESTACK.append(CPLANE)
+    _CPLANESTACK.append(Plane(CPLANE))
 def popMatrix():
     global CPLANE
     if _CPLANESTACK:
@@ -447,9 +448,9 @@ def constrain_region( pt,geo):
 def glob():
     return globals()
 
-def recive_from_gh(_env):
+def recive_from_gh(_ghenv):
     ## get ALL var overwrite this
-    source = _env.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
+    source = _ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
     exec(source)
     globals().update(locals())
 
@@ -463,17 +464,12 @@ def draw():
     noLoop()
 
 def GO(ghenv):
-    global _ghenv
-    switch = ghenv != _ghenv
-    print switch
-    print "frist",ghenv.LocalScope.GeoOut
-    _ghenv = ghenv
     if ghenv not in all_processing:
         this_p = Processing(ghenv)
         all_processing[ghenv] = this_p
     else:
         this_p = all_processing[ghenv]
-    if switch:
+    if ghenv != _ghenv:
         this_p.switch()
     param = ghenv.Component.Params.Input[0]
     RESET = True
@@ -485,8 +481,9 @@ def GO(ghenv):
     elif INFO.IS_LOOP:
         INFO.LOOP_COUNT += 1
         update_mouse()
+        #print 'before draw',ghenv.LocalScope.GeoOut
         draw()
-    print "final",ghenv.LocalScope.GeoOut
+    #print "final",ghenv.LocalScope.GeoOut
 class Processing:
     "store the runing state of every instance"
     count = 0
