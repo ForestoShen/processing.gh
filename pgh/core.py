@@ -453,20 +453,15 @@ def initialize(this,name = 'processing',autodisplay = True):
     _insureRightOutput(this)
     _clearOutput()
     get_class(this)
+    recive_from_gh(this)
 def glob():
     return globals()
-def send_all_name_to_gh(ghenv):
-    for k,v in globals().items():
-        ghenv.Script.SetVariable(k,v)
-def recive_from_gh(ghenv):
+
+def recive_from_gh(_ghenv):
     ## get ALL var overwrite this
-    source = ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
+    source = _ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
     exec(source)
     globals().update(locals())
-    """
-    global_dict = globals()
-    for name in ghenv.Script.GetVariableNames():
-        global_dict.update({name:ghenv.Script.GetVariable(name)})"""
 
 def noLoop():
     global isLoop
@@ -484,8 +479,7 @@ def GO(ghenv):
     for data in param.VolatileData.AllData(True):
         RESET = data.Value
     if RESET:
-        recive_from_gh(ghenv)
-        initialize(this = ghenv)
+        initialize(ghenv)
         setup()
     elif isLoop:
         global LOOP_COUNT
