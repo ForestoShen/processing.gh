@@ -8,9 +8,9 @@ more infomation : https://processing.org/
 
 2.put pgh folder to rhino's script searching path (usually in C:\Users\YOURUSERNAME\AppData\Roaming\McNeel\Rhinoceros\5.0\scripts)
 
-3.drop the userobject to grasshopper 
+3.drop the userobject to grasshopper(or make from the one in starter)
 
-4.you can find the processing.gh under math>script tab 
+4.you can find the processing.gh under math>script tab
 ## reference
 more information shall be added here later
 for now, useage of most function can be found here(some are not yet implemented): http://py.processing.org/reference/
