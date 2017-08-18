@@ -13,14 +13,13 @@ PI = math.pi
 constrain = Rhino.RhinoMath.Clamp
 import System.Drawing.Color as Color
 import System.Drawing.Rectangle
-import pgh.perlin
+import perlin
 from random import seed as randomSeed
 from random import gauss as randomGaussian
 from random import shuffle, choice
 from random import uniform
-from pgh.interact import *
-Simplex = pgh.perlin.SimplexNoise()
-import inspect
+from interact import *
+Simplex = perlin.SimplexNoise()
 def random(a = 1,b = 0):
     "random(a,b)->[a,b], random(a)->[0,a], random()->[0,1]"
     return uniform(a,b)
@@ -35,36 +34,32 @@ def noise(*args):
 def noiseDetial():
     raise NotImplemented
 
-# accessible global var
+# viewport size
 width = 640
 height = 800
+## global setting
+_ghenv = None
 P2D = Rhino.Display.DefinedViewportProjection.Top
 P3D = Rhino.Display.DefinedViewportProjection.Perspective
-## global setting
 if "DISPLAY" not in sc.sticky:
     sc.sticky["DISPLAY"] = Rhino.Display.CustomDisplay(True)
 DISPLAY = sc.sticky["DISPLAY"]
 
 ## display setting
-class Style:
-    def __init__(self):
-        self.IS_FILL = True
-        self.FILL_COLOR = Color.FromArgb(255,255,255)
-        self.IS_STROKE = True
-        self.STROKE_COLOR = Color.FromArgb(0,0,0,0)
-        self.STROKE_WEIGHT = 1
-style = Style()
+IS_FILL = True
+FILL_COLOR = Color.FromArgb(255,255,255)
+IS_STROKE = True
+STROKE_COLOR = Color.FromArgb(0,0,0,0)
+STROKE_WEIGHT = 1
 STYLESTACK = []
+_SHAPESTACK=[]
 
-
-_CPLANESTACK = [Plane.WorldXY]
-CPLANE = _CPLANESTACK[0]
-
+_CPLANESTACK = []
+CPLANE = Plane.WorldXY
 AUTO_DISPLAY = True
 GEOMETRY_OUTPUT = True
 COLOR_OUTPUT = False
-GeoOut = DataTree[object]()
-ColorOut = DataTree[Color]()
+
 ## general setting
 TORLERENCE = Rhino.RhinoDoc.ActiveDoc.PageAbsoluteTolerance
 VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
@@ -72,7 +67,6 @@ thisDoc = Rhino.RhinoDoc.ActiveDoc
 LOOP_COUNT = 0
 isLoop = True
 # mouse variable
-
 _posInfo = rs.GetCursorPos()
 mouseX = _posInfo[0].X
 mouseY = _posInfo[0].Y
@@ -84,38 +78,35 @@ mouseMoved = False
 mouseDragged = False
 mouseClicked = False
 def update_mouse():
-    global mouseX,screenX,mouseY,screenY,pmouseX,pmouseY,\
-           _pmousePressed,mousePressed,mouseMoved,mouseDragged,mouseClicked
-    pmouseX = mouseX
-    pmouseY = mouseY
-    _pmousePressed = mousePressed
+    _ghl.pmouseX = _ghl.mouseX
+    _ghl.pmouseY = _ghl.mouseY
+    _pmousePressed = _ghl.mousePressed
     _posInfo = rs.GetCursorPos()
-    mouseX = _posInfo[0].X
-    screenX = _posInfo[1].X
-    mouseY = _posInfo[0].Y
-    screenY = _posInfo[1].Y
+    _ghl.mouseX = _posInfo[0].X
+    _ghl.screenX = _posInfo[1].X
+    _ghl.mouseY = _posInfo[0].Y
+    _ghl.screenY = _posInfo[1].Y
     client = VIEWPORT.ClientToWorld(_posInfo[3])
-    tup = Intersect.Intersection.LinePlane(client,CPLANE)
+    tup = Intersect.Intersection.LinePlane(client,_ghl.CPLANE)
     if tup[0]:
         ptOnPlane = client.PointAt(tup[1])
-        mouseX = ptOnPlane.X
-        mouseY = ptOnPlane.Y
-    mousePressed = isMousePressed()
-    mouseMoved = pmouseX != mouseX or pmouseY != mouseY
-    mouseDragged = mouseMoved and mousePressed
-    mouseClicked = _pmousePressed and not mousePressed
-
+        _ghl.mouseX = ptOnPlane.X
+        _ghl.mouseY = ptOnPlane.Y
+    _ghl.mousePressed = isMousePressed()
+    _ghl.mouseMoved = _ghl.pmouseX != _ghl.mouseX \
+                 or _ghl.pmouseY != _ghl.mouseY
+    _ghl.mouseDragged = _ghl.mouseMoved and _ghl.mousePressed
+    _ghl.mouseClicked = _pmousePressed and not _ghl.mousePressed
 # buildin func
 def show_grid(switch = False):
     " turn off cplane grid "
     Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionGridVisible = switch
     Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionAxesVisible = switch
-def get_class(ghenv):
-    param = ghenv.Component.Params.Input[1]
+def get_class():
+    param = _ghenv.Component.Params.Input[1]
     for data in param.VolatileData.AllData(True):
         cls =  data.Value
-        ghenv.Script.SetVariable(cls.__name__, cls)
-
+        _ghenv.Script.SetVariable(cls.__name__, cls)
 def _clear():
     for uniquevar in [var for var in globals().copy() if var[0] != "_"]:
         del globals()[uniquevar]
@@ -136,7 +127,7 @@ def NewView(name,Projection,screenX = 0,screenY = 0,seperate = True):
         Projection,
         System.Drawing.Rectangle(screenX,screenY,screenX+width,screenY+height),
         seperate)
-        viewRect = Rectangle3d(CPLANE,width,height)
+        viewRect = Rectangle3d(_ghl.CPLANE,width,height)
         exist.ActiveViewport.ZoomBoundingBox(viewRect.BoundingBox)
     return exist
 def convert_polyline(curve):
@@ -153,8 +144,7 @@ def toPolyline(curve,maxAngleRadians = 0.1, tolerance = 0.1):
 ## basic processing function ##
 def toggleColor(state = False):
     "cancel color out mode"
-    global COLOR_OUTPUT
-    COLOR_OUTPUT = state
+    _ghl.COLOR_OUTPUT = state
 def color(*args):
     "accept : (gray), (gray,alphy), (r,g,b), (r,g,b,a)\
     return : Color"
@@ -181,47 +171,42 @@ def background(*args):
     _clearOutput()
 def size(w,h,mode=P2D,name='processing'):
     " set size of new viewport "
-    global width,height,VIEWPORT
-    width = w
-    height = h
-    VIEWPORT = NewView(name,mode).ActiveViewport
-
+    assign_to_gh('width', w)
+    assign_to_gh('height',h)
+    assign_to_gh('VIEWPORT', NewView(name,mode).ActiveViewport)
 #### add display
 def _clearOutput():
     DISPLAY.Clear()
     DISPLAY.Dispose
-    GeoOut.Clear()
-    ColorOut.Clear()
+    _ghl.GeoOut.Clear()
+    _ghl.ColorOut.Clear()
 def Display(anyCurve):
     " overall display "
-    if GEOMETRY_OUTPUT:
+    if _ghl.GEOMETRY_OUTPUT:
         # add diffrent fill and outline to different GeoOut bracnch
-        i = GeoOut.BranchCount
-        GeoOut.Add(anyCurve,Path(i))
-        if IS_STROKE:
-            ColorOut.Add(style.STROKE_COLOR,Path(i))
-        else:
-            ColorOut.Add(style.FILL_COLOR,Path(i))
-        if style.IS_FILL:
-            GeoOut.Add(_fill_geometry(anyCurve),Path(i))
-            ColorOut.Add(style.FILL_COLOR,Path(i))
-    if COLOR_OUTPUT:
-        _fill_color(anyCurve,style.IS_FILL,style.IS_STROKE)
+        i = _ghl.GeoOut.BranchCount
+        _ghl.GeoOut.Add(anyCurve,Path(i))
+        _ghl.ColorOut.Add(_ghl.STROKE_COLOR,Path(i))
+        if IS_FILL:
+            _ghl.GeoOut.Add(_fill_geometry(anyCurve),Path(i))
+            _ghl.ColorOut.Add(_ghl.FILL_COLOR,Path(i))
+    if _ghl.COLOR_OUTPUT:
+        _fill_color(anyCurve,_ghl.IS_FILL,_ghl.IS_STROKE)
 def Fill(curve,colour=None,real = True,brep = False):
     " rhino version fill "
     if not colour:
-        colour = style.FILL_COLOR
+        colour = _ghl.FILL_COLOR
     if real:
         _fill_geometry(curve,brep)
     else:
         _fill_color(curve)
 def noFill():
-    style.FILL_COLOR = Color.FromArgb(0,0,0,0)
+    assign_to_gh('FILL_COLOR', Color.FromArgb(0,0,0,0))
 def fill(*args):
     if isinstance(args[0], Color):
-        style.FILL_COLOR = args[0]
+        assign_to_gh("FILL_COLOR",args[0])
         return
-    style.FILL_COLOR = color(*args)
+    assign_to_gh("FILL_COLOR",color(*args))
 def _fill_geometry(planar_curve,brep = False):
     if brep:
         planar_curve = planar_curve.ToNurbsCurve()
@@ -233,60 +218,69 @@ def _fill_geometry(planar_curve,brep = False):
         return Mesh.CreateFromClosedPolyline(pline)
 def _fill_color(curve,fill = True,stroke = True):
     pline = convert_polyline(curve)
-    DISPLAY.AddPolygon(pline.ToArray(),style.FILL_COLOR,style.STROKE_COLOR,fill,False)
+    DISPLAY.AddPolygon(pline.ToArray(),FILL_COLOR,STROKE_COLOR,fill,False)
     if stroke:
-        DISPLAY.AddCurve(pline.ToNurbsCurve(),style.FILL_COLOR,style.STROKE_WEIGHT)
+        DISPLAY.AddCurve(pline.ToNurbsCurve(),FILL_COLOR,STROKE_WEIGHT)
 
 def Stroke(curve,colour=None,weight=None):
     if not colour:
-        colour=style.STROKE_COLOR
+        colour=STROKE_COLOR
     if not weight:
-        weight=style.STROKE_WEIGHT
+        weight=STROKE_WEIGHT
     c = curve.ToNurbsCurve()
     DISPLAY.AddCurve(c,colour,weight)
 def stroke(*args):
-    style.STROKE_COLOR = color(*args)
+    assign_to_gh('STROKE_COLOR',color(*args))
 def noStroke():
-    style.STROKE_COLOR = Color.FromArgb(0,0,0,0)
+    assign_to_gh('STROKE_COLOR',Color.FromArgb(0,0,0,0))
 def strokeWeight(weight):
-    style.STROKE_WEIGHT = weight
+    assign_to_gh('STROKE_WEIGHT',weight)
 def pushStyle():
-    STYLESTACK.append(style)
+    _ghl.STYLESTACK.append(
+                      (_ghl.FILL_COLOR,
+                       _ghl.STROKE_COLOR,
+                       _ghl.STROKE_WEIGHT,
+                       _ghl.IS_FILL,
+                       _ghl.IS_STROKE))
 def popStyle():
-    global style
+    STYLESTACK = _ghl.STYLESTACK
     if STYLESTACK:
-        style = STYLESTACK.pop()
-
+        (_ghl.FILL_COLOR,
+         _ghl.STROKE_COLOR,
+         _ghl.STROKE_WEIGHT,
+         _ghl.IS_FILL,
+         _ghl.IS_STROKE) = STYLESTACK.pop()
 ### create shape api ###
 class Shape(Curve):
     def __init__():
-        self.shape = super(self,Shape).__init__()
-        self.plist = []
+        shape = super(self,Shape).__init__()
+        plist = []
 def createShape():
     return Shape()
 def beginShape(kind = None):
     #! add fiiled polygon
+    _SHAPESTACK = _ghl._SHAPESTACK
     num = len(_SHAPESTACK)
     _SHAPESTACK.append([])
-    _CSHAPE = _SHAPESTACK[num]
-def vertex(x,y,z):
-    _CSHAPE.append(Point3d(x,y,z))
+    assign_to_gh('_CSHAPE', _SHAPESTACK[num])
+def vertex(x,y,z=0):
+    _ghl._CSHAPE.append(Point3d(x,y,z))
 def endShape():
     pline = Polyline(_SHAPESTACK.pop())
     if AUTO_DISPLAY:
         Display(pline)
     return pline
-
 ### matrix manipulation ###
 def translate(*args):
     "translate CPLANE with (x,y,[z]) or Vector3d"
+    CPLANE = _ghl.CPLANE
     if isinstance(args[0],Vector3d):
         CPLANE.Translate(Vector3d)
     else:
         CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)-CPLANE.Origin))
 def rotate(rad,axis=None,center=None):
     "return True if success"
-    cplane = VIEWPORT.ConstructionPlane()
+    cplane = _ghl.CPLANE
     if not axis:
         axis = cplane.ZAxis
     if not center:
@@ -294,17 +288,17 @@ def rotate(rad,axis=None,center=None):
     return cplane.Rotate(rad,axis,center)
 
 def pushMatrix():
-    _CPLANESTACK.append(CPLANE)
+    _ghl._CPLANESTACK.append(Plane(_ghl.CPLANE))
 def popMatrix():
-    global CPLANE
-    CPLANE = _CPLANESTACK.pop() if len(_CPLANESTACK)>1 else _CPLANESTACK[0]
+    _CPLANESTACK = _ghl._CPLANESTACK
+    if _CPLANESTACK:
+        assign_to_gh('CPLANE',_CPLANESTACK.pop())
 def setMatrix(plane):
     "change CPLANE to plane"
-    global CPLANE
-    CPLANE = plane
+    assign_to_gh('CPLANE',plane)
 ### time related ###
 def frameRate(fps):
-    ms = 1000/fps
+    ms = 1000/fps - 10
     print("Set Timer Interval to : %i ms" % (ms))
     return ms
 def millis():
@@ -316,15 +310,15 @@ def dist(pt1,pt2):
 class PVector():
     " processing PVector interface as Vector3d "
     def __init__(self,*args):
-        self.__data = Vector3d(CPLANE.PointAt(*args))
+        __data = Vector3d(_ghl.CPLANE.PointAt(*args))
     def __repr__(self):
-        return 'self.__data'
+        return '__data'
     def __str__(self):
-        return str(self.__data)
+        return str(__data)
     def __getattr__(self,attr):
-        return getattr(self.__data,attr)
+        return getattr(__data,attr)
     def mag(self):
-        return self.Length
+        return Length
     def add(self,v):
         return self + v
     def sub(self,v):
@@ -338,12 +332,12 @@ class PVector():
     def cross(self,v):
         return Vector3d.CrossProduct(self,v)
     def normalize(self):
-        return self.Unitize()
+        return Unitize()
     def rotate(self,radians):
-        self.Rotate(radians,CPLANE.ZAxis)
+        Rotate(radians,_ghl.CPLANE.ZAxis)
     @classmethod
     def angleBetween(cls,a,b):
-        return Vector3d.VectorAngle(a,b,CPLANE)
+        return Vector3d.VectorAngle(a,b,_ghl.CPLANE)
     @classmethod
     def random2D(cls):
         theta = uniform(0,2*PI)
@@ -355,14 +349,9 @@ class PVector():
         v = PVector.random2D() * (1-z*z)**0.5
         return Vector3d(v.X,v.Y,z)
 # basic geometry drawing
-def loadImage(fpath):
-    "load image"
-    pass
-def image(img,x,y):
-    "position image"
-    pass
 def arc(x,y,w,h,start,stop,mode='PIE'):
     " construct a elliptic arc "
+    CPLANE = _ghl.CPLANE
     if w == h:
         res = Arc(Circle(CPLANE,w),Interval(start,stop))
         spt = res.StartPoint
@@ -387,106 +376,105 @@ def arc(x,y,w,h,start,stop,mode='PIE'):
     Display(res)
 def line(x1,y1,x2,y2,z1=0,z2=0):
     " simple line "
-    pl = Plane(CPLANE)
+    pl = Plane(_ghl.CPLANE)
     ln = Line(pl.PointAt(x1,y1,z1),pl.PointAt(x2,y2,z2))
     if AUTO_DISPLAY:
         Display(ln)
     return ln
+def list_to_point(lst,n=3):
+    return [Point3d(*lst[i:i+n]) for i in range(0,len(lst),n)]
+def curve(*args):
+    "construct 3-degree InterpolatedCurve from (x1,y1,z1,...,xn,yn,zn,)\
+    or (PT1,PT2,PT3)"
+    ##! not on CPLANE yet
+    if not isinstance(args[0],Point3d):
+        assert len(args)%3 == 0, "argruments number not match"
+        pts = list_to_point(args)
+    rpts = [CPLANE.RemapToPlaneSpace(p)[1] for p in pts]
 
+    crv = Curve.CreateInterpolatedCurve(rpts,3)
+    if AUTO_DISPLAY:
+        Display(crv)
+    return crv
 def rect(x1,y1,x2,y2):
-    rec = Rectangle3d(CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
+    rec = Rectangle3d(_ghl.CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
     if AUTO_DISPLAY:
         Display(rec)
     return rec
 def ellipse(x,y,a,b):
-    pl = Plane(CPLANE)
+    pl = Plane(_ghl.CPLANE)
     pl.Translate(Vector3d(x,y,0))
     ell = Ellipse(pl,a,b)
     if AUTO_DISPLAY:
         Display(ell)
     return ell
 def text(content,x,y,z=0,height=None):
-    " add text to screen "
+    " !TODO add text to screen "
     te = TextEntity()
     te.Text = content
-    te.Plane = CPLANE
+    te.Plane = _ghl.CPLANE
     if height:
         te.TextHeight = height
-    te.Translate(Vector3d(CPLANE.PointAt(x,y,z)))
+    te.Translate(Vector3d(_ghl.CPLANE.PointAt(x,y,z)))
     txtcrvs = Curve.JoinCurves(te.Explode())
     if AUTO_DISPLAY:
         for crv in txtcrvs:
             Display(crv)
     return txtcrvs
-
+def polygon(x,y,r,n=5):
+    " draw polygon like the component "
+    c = Circle(CPLANE.PointAt(x,y,0),r)
+    pts = [c.PointAt(i*2*PI/n) for i in range(n+1)]
+    pline = Polyline(pts)
+    if AUTO_DISPLAY:
+        Display(pline)
+    return pline
 ### help func?
 def constrain_region( pt,geo):
-    Max = geo.GetBoundingBox(CPLANE).Max
-    Min = geo.GetBoundingBox(CPLANE).Min
+    Max = geo.GetBoundingBox(_ghl.CPLANE).Max
+    Min = geo.GetBoundingBox(_ghl.CPLANE).Min
     pt.X = Rhino.RhinoMath.Clamp(pt.X,Min.X,Max.X)
     pt.Y = Rhino.RhinoMath.Clamp(pt.Y,Min.Y,Max.Y)
     pt.Z = Rhino.RhinoMath.Clamp(pt.Z,Min.Z,Max.Z)
     return pt
-
-### decorator for simplicity
-def loop(fn):
-    if not isLoop:
-        return # should stop timer instead
-    global LOOP_COUNT
-    LOOP_COUNT += 1
-    update_mouse()
-    if _MODE == 'overlay' : CPLANE.OriginZ += TORLERENCE
-    def wrapped():
-        fn()
-    return wrapped
 def _insureRightOutput(ghenv):
     # slove multiply instance problem
-    global GeoOut,ColorOut
-    GeoOut = ghenv.LocalScope.GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
-    ColorOut = ghenv.LocalScope.ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
-def initialize(this,name = 'processing',autodisplay = True):
-    global isLoop,LOOP_COUNT,_time,AUTO_DISPLAY,CPLANE,_CPLANESTACK,VIEWPORT,style
-    _time = time.clock()
-    isLoop = True
+    _ghl.GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
+    _ghl.ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)
+def assign_to_gh(k,v):
+    _ghenv.Script.SetVariable(k,v)
+def assign_all_to_gh(**kwargs):
+    for k,v in kwargs.items():
+        assign_to_gh(k,v)
+def initialize(name = 'processing',autodisplay = True):
+    global VIEWPORT
+    send_all_name_to_gh()
+    _ghl._time = time.clock()
+    _ghl.isLoop = True
     VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
-    LOOP_COUNT = 0
-    _CPLANESTACK = []
-    CPLANE = Plane.WorldXY
-    AUTO_DISPLAY = autodisplay
-    style = Style()
-    _insureRightOutput(this)
+    _ghl.LOOP_COUNT = 0
+    _ghl._CPLANESTACK = []
+    _ghl.CPLANE = Plane.WorldXY
+    _ghl.AUTO_DISPLAY = autodisplay
+    _insureRightOutput(_ghenv)
     _clearOutput()
-    get_class(this)
-    recive_from_gh(this)
-def glob():
-    return globals()
-
-def recive_from_gh(_ghenv):
-    ## get ALL var overwrite this
-    source = _ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
-    exec(source)
-    globals().update(locals())
-
+    get_class()
+def send_all_name_to_gh():
+    for k,v in globals().items():
+        _ghenv.Script.SetVariable(k,v)
 def noLoop():
-    global isLoop
-    isLoop = False
-def setup():
-    "run once when RESET == True"
-    noLoop()
-def draw():
-    "continuous run when RESET == False"
-    noLoop()
-
+    _ghl.isLoop = False
 def GO(ghenv):
-    param = ghenv.Component.Params.Input[0]
-    RESET = True
+    global _ghenv,_ghl
+    _ghenv = ghenv
+    param = _ghenv.Component.Params.Input[0]
     for data in param.VolatileData.AllData(True):
-        RESET = data.Value
-    if RESET:
-        initialize(ghenv)
-        setup()
+        RESET = data
+    if RESET.Value == True:
+        _ghl = _ghenv.LocalScope
+        initialize()
+        _ghl.setup()
     elif isLoop:
-        global LOOP_COUNT
-        LOOP_COUNT += 1
+        _ghl.LOOP_COUNT += 1
         update_mouse()
-        draw()
+        _ghl.draw()

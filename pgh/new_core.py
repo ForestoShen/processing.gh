@@ -50,7 +50,7 @@ class Style:
         self.IS_FILL = True
         self.FILL_COLOR = Color.FromArgb(255,255,255)
         self.IS_STROKE = True
-        self.STROKE_COLOR = Color.FromArgb(255,0,0,0)
+        self.STROKE_COLOR = Color.FromArgb(1,0,0,0)
         self.STROKE_WEIGHT = 1
 class Info:
     def __init__(self):
@@ -110,16 +110,6 @@ def update_mouse():
     mouseDragged = mouseMoved and mousePressed
     mouseClicked = _pmousePressed and not mousePressed
 
-# buildin func
-def show_grid(switch = False):
-    " turn off cplane grid "
-    Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionGridVisible = switch
-    Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionAxesVisible = switch
-def get_class(ghenv):
-    param = ghenv.Component.Params.Input[1]
-    for data in param.VolatileData.AllData(True):
-        cls =  data.Value
-        ghenv.Script.SetVariable(cls.__name__, cls)
 """
 #useless now
 def _clear():
@@ -523,6 +513,21 @@ def constrain_region( pt,geo):
     global GeoOut,ColorOut
     GeoOut = ghenv.LocalScope.GeoOut = DataTree[object](ghenv.Component.Params.Output[1].VolatileData)
     ColorOut = ghenv.LocalScope.ColorOut = DataTree[object](ghenv.Component.Params.Output[2].VolatileData)"""
+# buildin func
+def show_grid(switch = False):
+    " turn off cplane grid "
+    Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionGridVisible = switch
+    Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport.ConstructionAxesVisible = switch
+def get_class(ghenv):
+    param = ghenv.Component.Params.Input[1]
+    for data in param.VolatileData.AllData(True):
+        cls =  data.Value
+        ghenv.Script.SetVariable(cls.__name__, cls)
+def get_option(ghenv):
+    param = ghenv.Component.Params.Input[2]
+    for data in param.VolatileData.AllData(True):
+        option = data.Value
+        ghenv.Script.SetVariable(cls.__name__, cls)
 
 def glob():
     return globals()
