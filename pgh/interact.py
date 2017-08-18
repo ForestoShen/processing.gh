@@ -20,13 +20,19 @@ _keydict = {"ESC":Keys.Escape,
            "CAPS":Keys.Capital,
            "BACKSPACE":Keys.Back,
 }
+_barray = (ctypes.c_byte * 256)()
+_ptr = ctypes.pointer(_barray)
 
-def keyPressed(key):
-    try:
-        a = ord(key.upper())
-    except :
-        a = _keydict[key.upper()]
-    return user32.GetKeyState(a) & 0x8000
-
-def mousePressed():
-    return user32.GetKeyState(Keys.LButton) & 0x8000
+def keyPressed(*args):
+    if len(args)==0:
+        user32.GetKeyboardState(_barray)
+        return sum(list(_barray))<0
+    elif len(args)==1:
+        key = args[0]
+        try:
+            a = ord(key.upper())
+        except :
+            a = _keydict[key.upper()]
+        return bool(user32.GetKeyState(a) & 0x8000)
+def isMousePressed():
+    return bool(user32.GetKeyState(Keys.LButton) & 0x8000)
