@@ -33,6 +33,7 @@ def noise(*args):
 def noiseDetial():
     raise NotImplemented
 
+PFLAG = None
 # accessible global var
 width = 640
 height = 800
@@ -523,7 +524,9 @@ def get_class(ghenv):
     for data in param.VolatileData.AllData(True):
         cls =  data.Value
         ghenv.Script.SetVariable(cls.__name__, cls)
-
+def unIntellisense(ghenv):
+    for k,v in globals().items():
+        ghenv.Script.SetIntellisenseVariable(k,v)
 def get_params(_ghenv):
     global_dict = globals()
     for param in _ghenv.Component.Params:
@@ -534,7 +537,7 @@ def glob():
 def recive_from_gh(_ghenv):
     ## get ALL var overwrite this
     get_params(_ghenv)
-    source = _ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
+    source = _ghenv.Component.Code.split("custom code below")[1].split("custom code above")[0].replace('\r','')
     exec(source)
     globals().update(locals())
     """
@@ -570,6 +573,7 @@ def GO(ghenv):
     elif INFO.IS_LOOP:
         INFO.LOOP_COUNT += 1
         update_mouse()
+        get_params(ghenv)
         #print 'before draw',ghenv.LocalScope.GeoOut
         draw()
     #print "final",ghenv.LocalScope.GeoOut
