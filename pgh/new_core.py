@@ -4,8 +4,6 @@ import rhinoscriptsyntax as rs
 from Rhino.Geometry import * #?
 import Grasshopper.Kernel.Data.GH_Path as Path
 import Grasshopper.DataTree as DataTree
-import Grasshopper.Kernel as gh #!
-import ghpythonlib.components as gc #!
 import time
 import math
 from math import * #!
@@ -46,14 +44,13 @@ if "DISPLAY" not in sc.sticky:
 DISPLAY = sc.sticky["DISPLAY"]
 _ghenv = None
 all_processing = {}
-all_drawing = {}
 ## display setting
 class Style:
     def __init__(self):
         self.IS_FILL = True
         self.FILL_COLOR = Color.FromArgb(255,255,255)
         self.IS_STROKE = True
-        self.STROKE_COLOR = Color.FromArgb(0,0,0,0)
+        self.STROKE_COLOR = Color.FromArgb(255,0,0,0)
         self.STROKE_WEIGHT = 1
 class Info:
     def __init__(self):
@@ -63,6 +60,7 @@ class Info:
 ### dummy placeholder only for import
 STYLE = Style()
 STYLESTACK = []
+_SHAPESTACK = []
 _CPLANESTACK = []
 CPLANE = Plane.WorldXY
 AUTO_DISPLAY = True
@@ -95,7 +93,7 @@ def update_mouse():
     _posInfo = rs.GetCursorPos()
     screenX = _posInfo[1].X
     screenY = _posInfo[1].Y
-    client = VIEWPORT.ClientToWorld(_posInfo[3])
+    client = thisDoc.Views.ActiveView.ActiveViewport.ClientToWorld(_posInfo[3])
     tup = Intersect.Intersection.LinePlane(client,CPLANE)
     if tup[0]:
         ptOnPlane = client.PointAt(tup[1])
@@ -203,10 +201,14 @@ def Display(anyCurve):
     " overall display "
     if GEOMETRY_OUTPUT:
         # add diffrent fill and outline to different GeoOut bracnch
+        is_fill = STYLE.FILL_COLOR.A > 0
+        is_stroke = STYLE.STROKE_COLOR.A > 0
         i = GeoOut.BranchCount
-        GeoOut.Add(anyCurve,Path(i))
-        ColorOut.Add(STYLE.STROKE_COLOR,Path(i))
-        if STYLE.IS_FILL:
+        if is_stroke:
+            GeoOut.Add(anyCurve,Path(i))
+            ColorOut.Add(STYLE.STROKE_COLOR,Path(i))
+
+        if is_fill:
             GeoOut.Add(_fill_geometry(anyCurve),Path(i))
             ColorOut.Add(STYLE.FILL_COLOR,Path(i))
     if COLOR_OUTPUT:
@@ -249,6 +251,9 @@ def Stroke(curve,colour=None,weight=None):
     c = curve.ToNurbsCurve()
     DISPLAY.AddCurve(c,colour,weight)
 def stroke(*args):
+    if isinstance(args[0], Color):
+        STYLE.STROKE_COLOR = args[0]
+        return
     STYLE.STROKE_COLOR = color(*args)
 def noStroke():
     STYLE.STROKE_COLOR = Color.FromArgb(0,0,0,0)
@@ -270,27 +275,31 @@ def createShape():
     return Shape()
 def beginShape(kind = None):
     #! add fiiled polygon
-    num = len(_SHAPESTACK)
-    _SHAPESTACK.append([])
-    _CSHAPE = _SHAPESTACK[num]
-def vertex(x,y,z):
-    _CSHAPE.append(Point3d(x,y,z))
+    _SHAPESTACK.append( (kind,[]) )
+def vertex(x,y,z=0):
+    _SHAPESTACK[-1][1].append(Point3d(x,y,z))
 def endShape():
-    pline = Polyline(_SHAPESTACK.pop())
+    shape = _SHAPESTACK.pop()
+    if shape[0]:
+        pass
+    pline = Polyline(shape[1])
     if AUTO_DISPLAY:
         Display(pline)
     return pline
 
+def world_to_cplane(pt):
+    "just pt - CPLANE.Origin"
+    return CPLANE.RemapToPlaneSpace(pt)[1]
 ### matrix manipulation ###
 def translate(*args):
     "translate CPLANE with (x,y,[z]) or Vector3d"
     if isinstance(args[0],Vector3d):
         CPLANE.Translate(Vector3d)
     else:
-        CPLANE.Translate(Vector3d(CPLANE.PointAt(*args)-CPLANE.Origin))
+        CPLANE.Translate(CPLANE.PointAt(*args)-CPLANE.Origin)
 def rotate(rad,axis=None,center=None):
     "return True if success"
-    cplane = VIEWPORT.ConstructionPlane()
+    cplane = CPLANE
     if not axis:
         axis = cplane.ZAxis
     if not center:
@@ -321,16 +330,52 @@ def dist(pt1,pt2):
 def map(value,a,b,c,d):
     "return remap value from (a,b) --> (c,d)"
     return (value-a)*(d-c)/(b-a) + c
-class PVector():
+class PVector(object):
     " processing PVector interface as Vector3d "
     def __init__(self,*args):
-        self.__data = Vector3d(CPLANE.PointAt(*args))
+        relative = Vector3d(CPLANE.Origin)
+        if len(args) == 0:
+            self.__data = Vector3d.Zero-relative
+        if len(args) == 1:
+            self.__data = args[0]
+        elif len(args) == 2:
+            self.__data = Vector3d(args[0],args[1],0)-relative
+        elif len(args) == 3:
+            self.__data = Vector3d(*args)-relative
     def __repr__(self):
-        return 'self.__data'
+        return 'PVector'+repr(self.__data)
     def __str__(self):
         return str(self.__data)
     def __getattr__(self,attr):
         return getattr(self.__data,attr)
+    def __radd__(self,other_v):
+        return PVector(self.__data + other_v)
+    def __add__(self,other):
+        if isinstance(other,Vector3d):
+            return PVector(self.__data + other)
+        return PVector(self.__data + other.__data)
+    def __sub__(self,other):
+        if isinstance(other,Vector3d):
+            return PVector(self.__data - other)
+        return PVector(self.__data - other.__data)
+    def __rsub__(self,other_v):
+        return PVector(other_v - self.__data)
+    def __div__(self,scalar):
+        return PVector(self.__data / scalar)
+    def __mul__(self,scalar):
+        return PVector(self.__data * scalar)
+    def __neg__(self):
+        return PVector(-self.__data)
+    def __cmp__(self, other):
+        return self.__data.CompareTo(other.__data)
+    def toVector(self):
+        return self.__data
+    def toPoint(self):
+        return Point3d(self.__data)
+    def get(self):
+        return self.__data
+    def set(self,v):
+        self.__data = v
     def mag(self):
         return self.Length
     def add(self,v):
@@ -338,7 +383,7 @@ class PVector():
     def sub(self,v):
         return self-v
     def mult(self,s):
-        return self-s
+        return self*s
     def div(self,s):
         return self/s
     def dot(self,v):
@@ -349,6 +394,18 @@ class PVector():
         return self.Unitize()
     def rotate(self,radians):
         self.Rotate(radians,CPLANE.ZAxis)
+    def limit(self,s):
+        self.Unitize()
+        self *= s
+    @property
+    def x(self):
+        return self.X
+    @property
+    def y(self):
+        return self.Y
+    @property
+    def z(self):
+        return self.Z
     @classmethod
     def angleBetween(cls,a,b):
         return Vector3d.VectorAngle(a,b,CPLANE)
@@ -365,7 +422,7 @@ class PVector():
 ##! TODO:image function
 def loadImage(fpath):
     "load image"
-    pass
+    return Rhino.Display.DisplayBitmap.Load(fpath)
 def image(img,x,y):
     "position image"
     pass
@@ -402,7 +459,21 @@ def line(x1,y1,x2,y2,z1=0,z2=0):
     if AUTO_DISPLAY:
         Display(ln)
     return ln
+def list_to_point(lst,n=3):
+    return [Point3d(*lst[i:i+n]) for i in range(0,len(lst),n)]
+def curve(*args):
+    "construct 3-degree InterpolatedCurve from (x1,y1,z1,...,xn,yn,zn,)\
+    or (PT1,PT2,PT3)"
+    ##! not on CPLANE yet
+    if not isinstance(args[0],Point3d):
+        assert len(args)%3 == 0, "argruments number not match"
+        pts = list_to_point(args)
+    rpts = [CPLANE.RemapToPlaneSpace(p)[1] for p in pts]
 
+    crv = Curve.CreateInterpolatedCurve(rpts,3)
+    if AUTO_DISPLAY:
+        Display(crv)
+    return crv
 def rect(x1,y1,x2,y2):
     rec = Rectangle3d(CPLANE,Point3d(x1,y1,0),Point3d(x2,y2,0))
     if AUTO_DISPLAY:
@@ -415,6 +486,14 @@ def ellipse(x,y,a,b):
     if AUTO_DISPLAY:
         Display(ell)
     return ell
+def polygon(x,y,r,n=5):
+    " draw polygon like the component "
+    c = Circle(CPLANE.PointAt(x,y,0),r)
+    pts = [c.PointAt(i*2*PI/n) for i in range(n+1)]
+    pline = Polyline(pts)
+    if AUTO_DISPLAY:
+        Display(pline)
+    return pline
 def text(content,x,y,z=0,height=None):
     " add text to screen "
     te = TextEntity()
@@ -462,7 +541,6 @@ def setup():
 def draw():
     "continuous run when RESET == False"
     noLoop()
-
 def GO(ghenv):
     if ghenv not in all_processing:
         this_p = Processing(ghenv)
@@ -502,7 +580,7 @@ class Processing:
         self.GeoOut = DataTree[object]()
         self.ColorOut = DataTree[Color]()
         self.INFO = Info()
-        self.VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
+        self._SHAPESTACK = []
     def initialize(self,name = 'processing',autodisplay = True,geometry_output = True,color_output = False):
         # initilize placeholder
         global INFO,AUTO_DISPLAY,\
@@ -510,12 +588,12 @@ class Processing:
                STYLE,STYLESTACK,\
                GeoOut,ColorOut,\
                GEOMETRY_OUTPUT,COLOR_OUTPUT,\
-               VIEWPORT
+               _SHAPESTACK
         INFO = Info()
         INFO.TIME = time.clock()
-        VIEWPORT = Rhino.RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport
         _CPLANESTACK = []
         CPLANE = Plane.WorldXY
+        _SHAPESTACK = []
         STYLESTACK = []
         STYLE = Style()
         AUTO_DISPLAY = autodisplay
@@ -534,7 +612,7 @@ class Processing:
                STYLE,STYLESTACK,\
                GeoOut,ColorOut,\
                GEOMETRY_OUTPUT,COLOR_OUTPUT,\
-               VIEWPORT
+               _SHAPESTACK
         CPLANE = self.CPLANE
         _CPLANESTACK = self._CPLANESTACK
         STYLE = self.STYLE
@@ -546,7 +624,7 @@ class Processing:
         GEOMETRY_OUTPUT = self.GEOMETRY_OUTPUT
         COLOR_OUTPUT = self.COLOR_OUTPUT
         AUTO_DISPLAY = self.AUTO_DISPLAY
-        VIEWPORT = self.VIEWPORT
+        _SHAPESTACK = self._SHAPESTACK
         recive_from_gh(self.env)
     def __del__(self):
         Processing.count -= 1

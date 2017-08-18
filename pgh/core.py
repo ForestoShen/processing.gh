@@ -198,7 +198,10 @@ def Display(anyCurve):
         # add diffrent fill and outline to different GeoOut bracnch
         i = GeoOut.BranchCount
         GeoOut.Add(anyCurve,Path(i))
-        ColorOut.Add(style.STROKE_COLOR,Path(i))
+        if IS_STROKE:
+            ColorOut.Add(style.STROKE_COLOR,Path(i))
+        else:
+            ColorOut.Add(style.FILL_COLOR,Path(i))
         if style.IS_FILL:
             GeoOut.Add(_fill_geometry(anyCurve),Path(i))
             ColorOut.Add(style.FILL_COLOR,Path(i))
