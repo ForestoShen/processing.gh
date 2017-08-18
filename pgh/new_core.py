@@ -523,21 +523,24 @@ def get_class(ghenv):
     for data in param.VolatileData.AllData(True):
         cls =  data.Value
         ghenv.Script.SetVariable(cls.__name__, cls)
-def get_option(ghenv):
-    param = ghenv.Component.Params.Input[2]
-    for data in param.VolatileData.AllData(True):
-        option = data.Value
-        ghenv.Script.SetVariable(cls.__name__, cls)
 
+def get_params(_ghenv):
+    global_dict = globals()
+    for param in _ghenv.Component.Params:
+        name = param.NickName
+        global_dict.update({name:_ghenv.Script.GetVariable(name)})
 def glob():
     return globals()
-
 def recive_from_gh(_ghenv):
     ## get ALL var overwrite this
+    get_params(_ghenv)
     source = _ghenv.Component.Code.replace('from pgh.core import *','').replace('GO(ghenv)','').replace('\r','')
     exec(source)
     globals().update(locals())
-
+    """
+    global_dict = globals()
+    for name in _ghenv.Script.GetVariableNames():
+        global_dict.update({name:_ghenv.Script.GetVariable(name)})"""
 def noLoop():
     INFO.IS_LOOP = False
 def setup():
@@ -547,12 +550,15 @@ def draw():
     "continuous run when RESET == False"
     noLoop()
 def GO(ghenv):
+    global _ghenv
+    switch = ghenv != _ghenv
+    _ghenv = ghenv
     if ghenv not in all_processing:
         this_p = Processing(ghenv)
         all_processing[ghenv] = this_p
     else:
         this_p = all_processing[ghenv]
-    if ghenv != _ghenv:
+    if switch:
         this_p.switch()
     param = ghenv.Component.Params.Input[0]
     RESET = True
@@ -574,7 +580,7 @@ class Processing:
         Processing.count += 1
         print("create new p, %s in total"%(Processing.count))
         self.env = ghenv
-        # placeholder for instance
+        # placeholder for instance, can be deleted
         self.STYLE = Style()
         self.STYLESTACK = []
         self._CPLANESTACK = []
@@ -582,8 +588,8 @@ class Processing:
         self.AUTO_DISPLAY = True
         self.GEOMETRY_OUTPUT = True
         self.COLOR_OUTPUT = False
-        self.GeoOut = DataTree[object]()
-        self.ColorOut = DataTree[Color]()
+        self.GeoOut = ghenv.LocalScope.GeoOut = DataTree[object]()
+        self.ColorOut = ghenv.LocalScope.ColorOut = DataTree[Color]()
         self.INFO = Info()
         self._SHAPESTACK = []
     def initialize(self,name = 'processing',autodisplay = True,geometry_output = True,color_output = False):
